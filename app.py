@@ -7,15 +7,13 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from dotenv import load_dotenv
 
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
+# Import modules
 from modules.project_manager import ProjectManager
 from modules.data_analyzer import DataAnalyzer
 from modules.visualization import Visualizer
 from modules.ai_assistant import AIAssistant
 from modules.data_processor import DataProcessor
+from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
 from modules.utils import load_custom_css, add_logo, encode_image
 from modules.ui_components import create_header, create_footer
 
@@ -37,6 +35,10 @@ if 'df' not in st.session_state:
 
 if 'visualizations' not in st.session_state:
     st.session_state.visualizations = []
+
+# Set OpenAI API key from environment variable if available
+if 'openai_api_key' not in st.session_state:
+    st.session_state.openai_api_key = os.getenv("OPENAI_API_KEY", "")
 
 def main():
     # Page config
@@ -143,6 +145,7 @@ def main():
                 "📊 Visualization Studio", 
                 "🔍 Analysis Hub",
                 "🤖 Data Assistant",
+                "🧠 GenAI Assistant",  # New GenAI tab
                 "📝 Data Processing"
             ])
             
@@ -232,8 +235,13 @@ def main():
                 assistant = AIAssistant(df)
                 assistant.render_interface()
             
-            # Data Processing Tab
+            # NEW: GenAI Assistant Tab
             with tabs[4]:
+                gen_ai_assistant = GenAIAssistant(df)
+                gen_ai_assistant.render_interface()
+            
+            # Data Processing Tab
+            with tabs[5]:
                 processor = DataProcessor(df)
                 processor.render_interface()
     

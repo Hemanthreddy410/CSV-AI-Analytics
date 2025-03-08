@@ -96,7 +96,7 @@ class ProjectManager:
                 success = self.create_project(new_project)
                 if success:
                     st.success(f"Project '{new_project}' created successfully!")
-                    st.experimental_rerun()
+                    st.rerun()
         
         # Project selection
         if st.session_state.projects:
@@ -114,14 +114,14 @@ class ProjectManager:
                     else:
                         if st.button(f"📁 {project_name}", key=f"select_{project_name}", use_container_width=True):
                             self.switch_project(project_name)
-                            st.experimental_rerun()
+                            st.rerun()
                 
                 with col2:
                     if not is_active and st.button("🔄", key=f"switch_{project_name}", help=f"Switch to {project_name}"):
                         self.switch_project(project_name)
-                        st.experimental_rerun()
+                        st.rerun()
                 
                 with col3:
                     if st.button("🗑️", key=f"delete_{project_name}", help=f"Delete {project_name}"):
                         self.delete_project(project_name)
-                        st.experimental_rerun()
+                        st.rerun()
