@@ -7,7 +7,10 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from dotenv import load_dotenv
 
-# Import modules
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from modules.project_manager import ProjectManager
 from modules.data_analyzer import DataAnalyzer
 from modules.visualization import Visualizer

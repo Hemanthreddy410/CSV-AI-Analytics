@@ -750,7 +750,6 @@ class Visualizer:
                     "figure": fig
                 }
                 st.session_state.visualizations.append(viz_data)
-                st.success("Visualization saved!").append(viz_data)
                 st.success("Visualization saved!")
     
     def _create_line_chart(self):
@@ -1158,4 +1157,30 @@ class Visualizer:
                     "type": "plotly",
                     "figure": fig
                 }
-                st.session_state.visualizations
+                st.session_state.visualizations.append(viz_data)
+                st.success("Visualization saved!")
+                
+    # Placeholder methods for remaining visualization types
+    def _create_grouped_bar_chart(self):
+        st.info("Grouped Bar Chart functionality is under development.")
+        
+    def _create_stacked_bar_chart(self):
+        st.info("Stacked Bar Chart functionality is under development.")
+        
+    def _create_bubble_chart(self):
+        st.info("Bubble Chart functionality is under development.")
+        
+    def _create_radar_chart(self):
+        st.info("Radar Chart functionality is under development.")
+        
+    def _create_distribution_plot(self):
+        st.info("Distribution Plot functionality is under development.")
+        
+    def _create_qq_plot(self):
+        st.info("Q-Q Plot functionality is under development.")
+        
+    def _create_ecdf_plot(self):
+        st.info("ECDF Plot functionality is under development.")
+        
+    def _create_residual_plot(self):
+        st.info("Residual Plot functionality is under development.")
