@@ -6,6 +6,7 @@ from io import BytesIO
 import matplotlib.pyplot as plt
 import seaborn as sns
 from dotenv import load_dotenv
+import matplotlib
 
 # Import modules
 from modules.project_manager import ProjectManager
@@ -16,6 +17,7 @@ from modules.data_processor import DataProcessor
 from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
 from modules.utils import load_custom_css, add_logo, encode_image
 from modules.ui_components import create_header, create_footer
+from modules.utils import load_custom_css, add_logo, encode_image, fix_arrow_dtypes
 
 # Load environment variables
 load_dotenv()
@@ -166,7 +168,7 @@ def main():
                 
                 # Data preview
                 with st.expander("Data Preview", expanded=True):
-                    st.dataframe(df.head(10), use_container_width=True)
+                    st.dataframe(fix_arrow_dtypes(df.head(10)), use_container_width=True)
                 
                 # Column information
                 with st.expander("Column Information"):
@@ -176,7 +178,7 @@ def main():
                         'Null Count': df.isna().sum(),
                         'Unique Values': [df[col].nunique() for col in df.columns]
                     })
-                    st.dataframe(col_info, use_container_width=True)
+                    st.dataframe(fix_arrow_dtypes(col_info), use_container_width=True)
                 
                 # Data statistics
                 with st.expander("Data Statistics"):

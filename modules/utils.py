@@ -383,6 +383,40 @@ def format_bytes(size_bytes):
     s = round(size_bytes / p, 2)
     
     return f"{s} {size_name[i]}"
+def fix_arrow_dtypes(df):
+    """
+    Fix data types that may cause problems with PyArrow conversion.
+    This is particularly helpful for Int64DType and other pandas extension types.
+    """
+    if df is None:
+        return None
+        
+    # Make a copy to avoid modifying the original
+    df_fixed = df.copy()
+    
+    # Check for problematic Int64 pandas extension type
+    for col in df_fixed.columns:
+        if hasattr(df_fixed[col].dtype, 'name'):
+            # Check for pandas extension integer types
+            if 'Int' in df_fixed[col].dtype.name:
+                # Convert to standard numpy int type
+                df_fixed[col] = df_fixed[col].astype('int64')
+            
+            # Check for other potentially problematic extension types
+            elif df_fixed[col].dtype.name == 'boolean':
+                df_fixed[col] = df_fixed[col].astype('bool')
+    
+    # For any object columns that should be string type
+    for col in df_fixed.select_dtypes(include=['object']).columns:
+        try:
+            # Check if the column has string values
+            if df_fixed[col].apply(lambda x: isinstance(x, str)).all():
+                df_fixed[col] = df_fixed[col].astype('string')
+        except:
+            # If any error, skip this column
+            pass
+    
+    return df_fixed
 
 
 def apply_theme_to_plot(fig):
