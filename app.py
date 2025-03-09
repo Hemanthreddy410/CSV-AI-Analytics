@@ -144,11 +144,11 @@ def main():
             # Create tabs for different functionality
             tabs = st.tabs([
                 "📋 Data Explorer", 
+                "📝 Data Processing",
                 "📊 Visualization Studio", 
                 "🔍 Analysis Hub",
                 "🤖 Data Assistant",
-                "🧠 GenAI Assistant",  # New GenAI tab
-                "📝 Data Processing"
+                "🧠 GenAI Assistant"
             ])
             
             # Data Explorer Tab
@@ -222,30 +222,30 @@ def main():
                                 plt.xticks(rotation=45)
                                 st.pyplot(fig)
             
-            # Visualization Studio Tab
+            # Data Processing Tab (moved from position 5 to position 1)
             with tabs[1]:
+                processor = DataProcessor(df)
+                processor.render_interface()
+            
+            # Visualization Studio Tab
+            with tabs[2]:
                 visualizer = Visualizer(df)
                 visualizer.render_interface()
             
             # Analysis Hub Tab
-            with tabs[2]:
+            with tabs[3]:
                 analyzer = DataAnalyzer(df)
                 analyzer.render_interface()
             
             # Data Assistant Tab
-            with tabs[3]:
+            with tabs[4]:
                 assistant = AIAssistant(df)
                 assistant.render_interface()
             
-            # NEW: GenAI Assistant Tab
-            with tabs[4]:
+            # GenAI Assistant Tab
+            with tabs[5]:
                 gen_ai_assistant = GenAIAssistant(df)
                 gen_ai_assistant.render_interface()
-            
-            # Data Processing Tab
-            with tabs[5]:
-                processor = DataProcessor(df)
-                processor.render_interface()
     
     # Create footer
     create_footer()

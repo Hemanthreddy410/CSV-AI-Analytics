@@ -201,24 +201,36 @@ def load_custom_css():
         font-size: 0.9rem;
     }
     
-    /* Tabs styling */
+    /* Improved Tab Navigation */
     .stTabs [data-baseweb="tab-list"] {
-        gap: 2px;
+        gap: 5px;
+        background-color: var(--background-color);
+        padding: 0.5rem;
+        border-radius: 10px;
+        margin-bottom: 1rem;
     }
     
     .stTabs [data-baseweb="tab"] {
-        height: 50px;
-        white-space: pre-wrap;
+        height: auto;
+        padding: 0.75rem 1rem;
         background-color: var(--card-bg-color);
-        border-radius: 4px 4px 0 0;
-        gap: 1px;
-        padding-top: 10px;
-        padding-bottom: 10px;
+        border-radius: 8px;
+        transition: all 0.3s ease;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        font-weight: 500;
+        white-space: pre-wrap;
+    }
+    
+    .stTabs [data-baseweb="tab"]:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
     }
     
     .stTabs [aria-selected="true"] {
         background-color: var(--primary-color) !important;
         color: white !important;
+        font-weight: 600 !important;
+        box-shadow: 0 4px 8px rgba(74, 111, 227, 0.3) !important;
     }
     
     /* Card styling */
@@ -226,6 +238,12 @@ def load_custom_css():
         border: 1px solid var(--border-color);
         border-radius: 10px;
         overflow: hidden;
+        transition: all 0.3s ease;
+        margin-bottom: 1rem;
+    }
+    
+    div[data-testid="stExpander"]:hover {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
     
     div[data-testid="stExpander"] > details {
@@ -236,10 +254,16 @@ def load_custom_css():
         padding: 1rem;
         font-weight: 600;
         color: var(--secondary-color);
+        background-color: rgba(74, 111, 227, 0.05);
+        transition: all 0.3s ease;
     }
     
     div[data-testid="stExpander"] > details > summary:hover {
-        background-color: var(--hover-color);
+        background-color: rgba(74, 111, 227, 0.1);
+    }
+    
+    div[data-testid="stExpander"] > details[open] > summary {
+        border-bottom: 2px solid var(--primary-color);
     }
     
     /* Button styling */
@@ -260,6 +284,12 @@ def load_custom_css():
         border-radius: 10px;
         padding: 1rem;
         box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s ease;
+    }
+    
+    div[data-testid="stMetric"]:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
     }
     
     div[data-testid="stMetric"] > div:first-child {
@@ -293,6 +323,226 @@ def load_custom_css():
     div[data-testid="stErrorMessage"] {
         background-color: rgba(220, 53, 69, 0.1);
         border-color: var(--negative-color);
+    }
+    
+    /* Data Processing Workflow Guide */
+    .workflow-step {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.75rem;
+        padding: 0.75rem;
+        background-color: rgba(74, 111, 227, 0.05);
+        border-radius: 8px;
+        transition: all 0.3s ease;
+    }
+    
+    .workflow-step:hover {
+        background-color: rgba(74, 111, 227, 0.1);
+    }
+    
+    .workflow-step-number {
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        width: 30px;
+        height: 30px;
+        background-color: var(--primary-color);
+        color: white;
+        border-radius: 50%;
+        margin-right: 1rem;
+        font-weight: bold;
+    }
+    
+    .workflow-step-content {
+        flex: 1;
+    }
+    
+    /* Processing History */
+    .history-item {
+        display: flex;
+        align-items: center;
+        padding: 0.5rem 0.75rem;
+        background-color: var(--card-bg-color);
+        border-radius: 6px;
+        margin-bottom: 0.5rem;
+        border-left: 3px solid var(--primary-color);
+        transition: all 0.3s ease;
+    }
+    
+    .history-item:hover {
+        background-color: var(--hover-color);
+        transform: translateX(3px);
+    }
+    
+    .history-icon {
+        margin-right: 0.75rem;
+        color: var(--primary-color);
+    }
+    
+    .history-description {
+        flex: 1;
+    }
+    
+    .history-timestamp {
+        color: var(--light-text-color);
+        font-size: 0.8rem;
+    }
+    
+    /* Form controls styling */
+    div[data-baseweb="select"] {
+        border-radius: 6px;
+        transition: all 0.3s;
+    }
+    
+    div[data-baseweb="select"]:hover {
+        border-color: var(--primary-color);
+    }
+    
+    div[data-baseweb="input"] {
+        border-radius: 6px;
+        transition: all 0.3s;
+    }
+    
+    div[data-baseweb="input"]:hover {
+        border-color: var(--primary-color);
+    }
+    
+    /* Slider styling */
+    div[data-testid="stSlider"] > div {
+        padding-top: 0.5rem;
+        padding-bottom: 1rem;
+    }
+    
+    div[data-testid="stSlider"] > div > div > div {
+        background-color: var(--primary-color);
+    }
+    
+    /* Checkbox styling */
+    label[data-baseweb="checkbox"] {
+        gap: 0.5rem;
+    }
+    
+    label[data-baseweb="checkbox"] > div {
+        background-color: var(--card-bg-color);
+        border-color: var(--border-color);
+        transition: all 0.3s;
+    }
+    
+    label[data-baseweb="checkbox"]:hover > div {
+        border-color: var(--primary-color);
+    }
+    
+    label[data-baseweb="checkbox"][aria-checked="true"] > div {
+        background-color: var(--primary-color) !important;
+        border-color: var(--primary-color) !important;
+    }
+    
+    /* Radio button styling */
+    label[data-baseweb="radio"] {
+        gap: 0.5rem;
+    }
+    
+    label[data-baseweb="radio"] > div {
+        background-color: var(--card-bg-color);
+        border-color: var(--border-color);
+        transition: all 0.3s;
+    }
+    
+    label[data-baseweb="radio"]:hover > div {
+        border-color: var(--primary-color);
+    }
+    
+    label[data-baseweb="radio"][aria-checked="true"] > div > div {
+        background-color: var(--primary-color) !important;
+    }
+    
+    /* Progress bar */
+    div[role="progressbar"] > div {
+        background-color: var(--primary-color);
+    }
+    
+    /* Sidebar styling */
+    section[data-testid="stSidebar"] {
+        background-color: var(--background-color);
+        border-right: 1px solid var(--border-color);
+    }
+    
+    section[data-testid="stSidebar"] > div:first-child {
+        padding: 2rem 1rem;
+    }
+    
+    /* Data table styling */
+    div[data-testid="stTable"] {
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+    }
+    
+    /* Make tooltips more visible */
+    span[data-baseweb="tooltip"] {
+        background-color: var(--secondary-color) !important;
+        border-radius: 4px !important;
+        padding: 0.5rem 0.75rem !important;
+        font-size: 0.9rem !important;
+    }
+    
+    /* Graph container styling */
+    [data-testid="stDecoration"] {
+        border-radius: 8px;
+        overflow: hidden;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.05);
+        transition: all 0.3s;
+    }
+    
+    [data-testid="stDecoration"]:hover {
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+    
+    /* File uploader */
+    div[data-testid="stFileUploader"] {
+        border-radius: 8px;
+        overflow: hidden;
+        border: 2px dashed var(--border-color);
+        padding: 1rem;
+        transition: all 0.3s;
+    }
+    
+    div[data-testid="stFileUploader"]:hover {
+        border-color: var(--primary-color);
+        background-color: rgba(74, 111, 227, 0.05);
+    }
+    
+    div[data-testid="stFileUploadDropzone"] > span {
+        color: var(--primary-color);
+        font-weight: 500;
+    }
+    
+    /* Download button styling */
+    a.download-button {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background-color: var(--primary-color);
+        color: white;
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-weight: 500;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+        margin-top: 0.5rem;
+    }
+    
+    a.download-button:hover {
+        background-color: var(--secondary-color);
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        transform: translateY(-2px);
+    }
+    
+    a.download-button::before {
+        content: "📥";
+        margin-right: 0.5rem;
     }
     </style>
     """, unsafe_allow_html=True)
