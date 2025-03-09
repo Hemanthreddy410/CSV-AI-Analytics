@@ -11,7 +11,7 @@ import matplotlib
 # Import modules
 from modules.project_manager import ProjectManager
 from modules.data_analyzer import DataAnalyzer
-from modules.visualization import EnhancedVisualizer
+from modules.visualization import Visualizer
 from modules.ai_assistant import AIAssistant
 from modules.data_processor import DataProcessor
 from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
