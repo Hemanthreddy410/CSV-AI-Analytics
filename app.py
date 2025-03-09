@@ -11,7 +11,7 @@ import matplotlib
 # Import modules
 from modules.project_manager import ProjectManager
 from modules.data_analyzer import DataAnalyzer
-from modules.visualization import Visualizer
+from modules.visualization import EnhancedVisualizer
 from modules.ai_assistant import AIAssistant
 from modules.data_processor import DataProcessor
 from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
@@ -135,117 +135,114 @@ def main():
         # Display current project name
         st.markdown(f"<h1 class='project-title'>Project: {st.session_state.current_project}</h1>", unsafe_allow_html=True)
         
-        # Check if data is loaded
-        if st.session_state.df is None:
-            st.info("👆 Please upload a CSV file using the sidebar to get started")
+        # Find this section in app.py (around line 150)
+# Replace the tabs definition with this code:
+
+# Create tabs for different functionality
+tabs = st.tabs([
+    "📋 Data Explorer", 
+    "📝 Data Processing",  # Moved from position 6 to position 2
+    "📊 Visualization Studio", 
+    "🔍 Analysis Hub",
+    "🤖 Data Assistant",
+    "🧠 GenAI Assistant"
+])
+
+# Data Explorer Tab
+with tabs[0]:
+    st.header("Data Explorer")
+    
+    # Display dataset info
+    col1, col2, col3, col4 = st.columns(4)
+    with col1:
+        st.metric("Rows", df.shape[0])
+    with col2:
+        st.metric("Columns", df.shape[1])
+    with col3:
+        st.metric("Missing Values", df.isna().sum().sum())
+    with col4:
+        st.metric("Duplicates", df.duplicated().sum())
+    
+    # Data preview
+    with st.expander("Data Preview", expanded=True):
+        st.dataframe(fix_arrow_dtypes(df.head(10)), use_container_width=True)
+    
+    # Column information
+    with st.expander("Column Information"):
+        col_info = pd.DataFrame({
+            'Type': df.dtypes,
+            'Non-Null Count': df.count(),
+            'Null Count': df.isna().sum(),
+            'Unique Values': [df[col].nunique() for col in df.columns]
+        })
+        st.dataframe(fix_arrow_dtypes(col_info), use_container_width=True)
+    
+    # Data statistics
+    with st.expander("Data Statistics"):
+        if df.select_dtypes(include=['number']).columns.tolist():
+            st.dataframe(df.describe(), use_container_width=True)
         else:
-            df = st.session_state.df
+            st.info("No numeric columns found for statistics")
+    
+    # Column details
+    with st.expander("Column Details"):
+        selected_column = st.selectbox("Select a column for details:", df.columns)
+        
+        if selected_column:
+            col1, col2 = st.columns(2)
             
-            # Create tabs for different functionality
-            tabs = st.tabs([
-                "📋 Data Explorer", 
-                "📝 Data Processing",
-                "📊 Visualization Studio", 
-                "🔍 Analysis Hub",
-                "🤖 Data Assistant",
-                "🧠 GenAI Assistant"
-            ])
-            
-            # Data Explorer Tab
-            with tabs[0]:
-                st.header("Data Explorer")
+            with col1:
+                st.write(f"**Column:** {selected_column}")
+                st.write(f"**Type:** {df[selected_column].dtype}")
+                st.write(f"**Missing Values:** {df[selected_column].isna().sum()}")
+                st.write(f"**Unique Values:** {df[selected_column].nunique()}")
                 
-                # Display dataset info
-                col1, col2, col3, col4 = st.columns(4)
-                with col1:
-                    st.metric("Rows", df.shape[0])
-                with col2:
-                    st.metric("Columns", df.shape[1])
-                with col3:
-                    st.metric("Missing Values", df.isna().sum().sum())
-                with col4:
-                    st.metric("Duplicates", df.duplicated().sum())
-                
-                # Data preview
-                with st.expander("Data Preview", expanded=True):
-                    st.dataframe(fix_arrow_dtypes(df.head(10)), use_container_width=True)
-                
-                # Column information
-                with st.expander("Column Information"):
-                    col_info = pd.DataFrame({
-                        'Type': df.dtypes,
-                        'Non-Null Count': df.count(),
-                        'Null Count': df.isna().sum(),
-                        'Unique Values': [df[col].nunique() for col in df.columns]
-                    })
-                    st.dataframe(fix_arrow_dtypes(col_info), use_container_width=True)
-                
-                # Data statistics
-                with st.expander("Data Statistics"):
-                    if df.select_dtypes(include=['number']).columns.tolist():
-                        st.dataframe(df.describe(), use_container_width=True)
-                    else:
-                        st.info("No numeric columns found for statistics")
-                
-                # Column details
-                with st.expander("Column Details"):
-                    selected_column = st.selectbox("Select a column for details:", df.columns)
-                    
-                    if selected_column:
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write(f"**Column:** {selected_column}")
-                            st.write(f"**Type:** {df[selected_column].dtype}")
-                            st.write(f"**Missing Values:** {df[selected_column].isna().sum()}")
-                            st.write(f"**Unique Values:** {df[selected_column].nunique()}")
-                            
-                            if df[selected_column].dtype in ['int64', 'float64']:
-                                st.write(f"**Min:** {df[selected_column].min()}")
-                                st.write(f"**Max:** {df[selected_column].max()}")
-                                st.write(f"**Mean:** {df[selected_column].mean()}")
-                                st.write(f"**Median:** {df[selected_column].median()}")
-                        
-                        with col2:
-                            # Show value counts or histogram depending on data type
-                            if df[selected_column].dtype in ['int64', 'float64']:
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                sns.histplot(df[selected_column].dropna(), kde=True, ax=ax)
-                                plt.title(f'Distribution of {selected_column}')
-                                st.pyplot(fig)
-                            else:
-                                # Show top 10 value counts for non-numeric columns
-                                value_counts = df[selected_column].value_counts().head(10)
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                value_counts.plot(kind='bar', ax=ax)
-                                plt.title(f'Top 10 Values in {selected_column}')
-                                plt.xticks(rotation=45)
-                                st.pyplot(fig)
+                if df[selected_column].dtype in ['int64', 'float64']:
+                    st.write(f"**Min:** {df[selected_column].min()}")
+                    st.write(f"**Max:** {df[selected_column].max()}")
+                    st.write(f"**Mean:** {df[selected_column].mean()}")
+                    st.write(f"**Median:** {df[selected_column].median()}")
             
-            # Data Processing Tab (moved from position 5 to position 1)
-            with tabs[1]:
-                processor = DataProcessor(df)
-                processor.render_interface()
-            
-            # Visualization Studio Tab
-            with tabs[2]:
-                visualizer = Visualizer(df)
-                visualizer.render_interface()
-            
-            # Analysis Hub Tab
-            with tabs[3]:
-                analyzer = DataAnalyzer(df)
-                analyzer.render_interface()
-            
-            # Data Assistant Tab
-            with tabs[4]:
-                assistant = AIAssistant(df)
-                assistant.render_interface()
-            
-            # GenAI Assistant Tab
-            with tabs[5]:
-                gen_ai_assistant = GenAIAssistant(df)
-                gen_ai_assistant.render_interface()
+            with col2:
+                # Show value counts or histogram depending on data type
+                if df[selected_column].dtype in ['int64', 'float64']:
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    sns.histplot(df[selected_column].dropna(), kde=True, ax=ax)
+                    plt.title(f'Distribution of {selected_column}')
+                    st.pyplot(fig)
+                else:
+                    # Show top 10 value counts for non-numeric columns
+                    value_counts = df[selected_column].value_counts().head(10)
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    value_counts.plot(kind='bar', ax=ax)
+                    plt.title(f'Top 10 Values in {selected_column}')
+                    plt.xticks(rotation=45)
+                    st.pyplot(fig)
+
+# Data Processing Tab (moved from position 5 to position 1)
+with tabs[1]:
+    processor = DataProcessor(df)
+    processor.render_interface()
+
+# Visualization Studio Tab
+with tabs[2]:
+    visualizer = Visualizer(df)
+    visualizer.render_interface()
+
+# Analysis Hub Tab
+with tabs[3]:
+    analyzer = DataAnalyzer(df)
+    analyzer.render_interface()
+
+# Data Assistant Tab
+with tabs[4]:
+    assistant = AIAssistant(df)
+    assistant.render_interface()
+
+# GenAI Assistant Tab
+with tabs[5]:
+    gen_ai_assistant = GenAIAssistant(df)
+    gen_ai_assistant.render_interface()
     
     # Create footer
     create_footer()
