@@ -17,7 +17,7 @@ class DataAnalyzer:
         
         # Store analysis results in session state if not already there
         if 'analysis_results' not in st.session_state:
-            st.session_state.analysis_results = {}
+            st.session_state.dfanalysis_results = {}
     
     def generate_summary_statistics(self):
         """Generate summary statistics for numeric columns"""
