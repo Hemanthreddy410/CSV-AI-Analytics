@@ -21,6 +21,24 @@ class DataProcessor:
         # Store processing history
         if 'processing_history' not in st.session_state:
             st.session_state.processing_history = []
+
+    def _update_session_state(self):
+        """
+        Update session state with current dataframe state.
+        Call this after any operation that modifies the dataframe.
+        """
+        # If we're in a project context, update the project data
+        if 'current_project' in st.session_state and st.session_state.current_project is not None:
+            if st.session_state.current_project in st.session_state.projects:
+                # The dataframe is already modified by reference
+                # But we should make sure the project data is updated too
+                st.session_state.projects[st.session_state.current_project]['data'] = self.df
+                
+                # Update last_modified timestamp
+                st.session_state.projects[st.session_state.current_project]['last_modified'] = datetime.datetime.now()
+                
+        # Update the main dataframe reference
+        st.session_state.df = self.df
     
     def render_interface(self):
         """Render the data processing interface"""
