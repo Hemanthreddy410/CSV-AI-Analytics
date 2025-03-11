@@ -11,7 +11,7 @@ import matplotlib
 # Import modules
 from modules.project_manager import ProjectManager
 from modules.data_analyzer import DataAnalyzer
-from modules.visualization import Visualizer
+from modules.visualization import EnhancedVisualizer
 from modules.ai_assistant import AIAssistant
 from modules.data_processor import DataProcessor
 from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
@@ -34,6 +34,9 @@ if 'chat_history' not in st.session_state:
 
 if 'df' not in st.session_state:
     st.session_state.df = None
+
+if 'original_df' not in st.session_state:
+    st.session_state.original_df = None
 
 if 'visualizations' not in st.session_state:
     st.session_state.visualizations = []
@@ -85,7 +88,12 @@ def main():
                         
                         # Store in session state
                         st.session_state.df = df
+                        st.session_state.original_df = df.copy()  # Keep a copy of the original data
                         st.session_state.projects[st.session_state.current_project]['data'] = df
+                        
+                        # Reset processing history when new file is uploaded
+                        if 'processing_history' in st.session_state:
+                            st.session_state.processing_history = []
                         
                         # Success message
                         st.sidebar.success(f"✅ File loaded successfully: {uploaded_file.name}")
@@ -95,6 +103,13 @@ def main():
                         
                 except Exception as e:
                     st.sidebar.error(f"Error: {str(e)}")
+            
+            # Show data modification status if data exists
+            if st.session_state.df is not None:
+                if 'processing_history' in st.session_state and len(st.session_state.processing_history) > 0:
+                    st.sidebar.info(f"📝 Data has been modified ({len(st.session_state.processing_history)} changes)")
+                else:
+                    st.sidebar.success("✅ Working with original data")
     
     # Main content
     if st.session_state.current_project is None:
@@ -135,24 +150,27 @@ def main():
         # Display current project name
         st.markdown(f"<h1 class='project-title'>Project: {st.session_state.current_project}</h1>", unsafe_allow_html=True)
         
-        # Get the current dataframe from session state
-        df = st.session_state.df
-        
-        # Create tabs for different functionality
-        tabs = st.tabs([
-            "📋 Data Explorer", 
-            "📝 Data Processing",  # Moved from position 6 to position 2
-            "📊 Visualization Studio", 
-            "🔍 Analysis Hub",
-            "🤖 Data Assistant",
-            "🧠 GenAI Assistant"
-        ])
-
-        # Data Explorer Tab
-        with tabs[0]:
-            st.header("Data Explorer")
+        # Make sure we have data to work with
+        if st.session_state.df is None:
+            st.info("Please upload a dataset using the sidebar to get started.")
+        else:
+            # Create tabs for different functionality
+            tabs = st.tabs([
+                "📋 Data Explorer", 
+                "📝 Data Processing",  
+                "📊 Visualization Studio", 
+                "🔍 Analysis Hub",
+                "🤖 Data Assistant",
+                "🧠 GenAI Assistant"
+            ])
             
-            if df is not None:
+            # Data Explorer Tab
+            with tabs[0]:
+                st.header("Data Explorer")
+                
+                # Always use the session state DataFrame
+                df = st.session_state.df
+                
                 # Display dataset info
                 col1, col2, col3, col4 = st.columns(4)
                 with col1:
@@ -219,48 +237,31 @@ def main():
                                 plt.title(f'Top 10 Values in {selected_column}')
                                 plt.xticks(rotation=45)
                                 st.pyplot(fig)
-            else:
-                st.info("Please upload a dataset to explore.")
-
-        # Data Processing Tab (moved from position 5 to position 1)
-        with tabs[1]:
-            if df is not None:
-                processor = DataProcessor(df)
+            
+            # Data Processing Tab
+            with tabs[1]:
+                processor = DataProcessor(st.session_state.df)  # Pass session state df
                 processor.render_interface()
-            else:
-                st.info("Please upload a dataset to process.")
-
-        # Visualization Studio Tab
-        with tabs[2]:
-            if df is not None:
-                visualizer = Visualizer(df)
+            
+            # Visualization Studio Tab
+            with tabs[2]:
+                visualizer = EnhancedVisualizer(st.session_state.df)  # Pass session state df
                 visualizer.render_interface()
-            else:
-                st.info("Please upload a dataset to visualize.")
-
-        # Analysis Hub Tab
-        with tabs[3]:
-            if df is not None:
-                analyzer = DataAnalyzer(df)
+            
+            # Analysis Hub Tab
+            with tabs[3]:
+                analyzer = DataAnalyzer(st.session_state.df)  # Pass session state df
                 analyzer.render_interface()
-            else:
-                st.info("Please upload a dataset to analyze.")
-
-        # Data Assistant Tab
-        with tabs[4]:
-            if df is not None:
-                assistant = AIAssistant(df)
+            
+            # Data Assistant Tab
+            with tabs[4]:
+                assistant = AIAssistant(st.session_state.df)  # Pass session state df
                 assistant.render_interface()
-            else:
-                st.info("Please upload a dataset to use the assistant.")
-
-        # GenAI Assistant Tab
-        with tabs[5]:
-            if df is not None:
-                gen_ai_assistant = GenAIAssistant(df)
+            
+            # GenAI Assistant Tab
+            with tabs[5]:
+                gen_ai_assistant = GenAIAssistant(st.session_state.df)  # Pass session state df
                 gen_ai_assistant.render_interface()
-            else:
-                st.info("Please upload a dataset to use the GenAI assistant.")
     
     # Create footer
     create_footer()

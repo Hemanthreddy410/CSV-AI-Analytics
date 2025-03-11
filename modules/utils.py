@@ -4,6 +4,8 @@ from io import BytesIO
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+import io
+import datetime
 
 def load_custom_css():
     """Load custom CSS styles"""
@@ -636,35 +638,45 @@ def format_bytes(size_bytes):
 def fix_arrow_dtypes(df):
     """
     Fix data types that may cause problems with PyArrow conversion.
-    This is particularly helpful for Int64DType and other pandas extension types.
+    This is particularly helpful for pandas extension types and dtype objects.
     """
+    import pandas as pd
+    import numpy as np
+    
     if df is None:
         return None
-        
+    
     # Make a copy to avoid modifying the original
     df_fixed = df.copy()
     
-    # Check for problematic Int64 pandas extension type
+    # First pass: Handle common pandas extension types
     for col in df_fixed.columns:
-        if hasattr(df_fixed[col].dtype, 'name'):
-            # Check for pandas extension integer types
-            if 'Int' in df_fixed[col].dtype.name:
-                # Convert to standard numpy int type
-                df_fixed[col] = df_fixed[col].astype('int64')
-            
-            # Check for other potentially problematic extension types
-            elif df_fixed[col].dtype.name == 'boolean':
-                df_fixed[col] = df_fixed[col].astype('bool')
+        # Handle pandas extension integer types
+        if hasattr(df_fixed[col].dtype, 'name') and 'Int' in df_fixed[col].dtype.name:
+            df_fixed[col] = df_fixed[col].astype('int64')
+        
+        # Handle pandas boolean type
+        elif hasattr(df_fixed[col].dtype, 'name') and df_fixed[col].dtype.name == 'boolean':
+            df_fixed[col] = df_fixed[col].astype('bool')
     
-    # For any object columns that should be string type
+    # Second pass: Convert all object columns to strings
     for col in df_fixed.select_dtypes(include=['object']).columns:
-        try:
-            # Check if the column has string values
-            if df_fixed[col].apply(lambda x: isinstance(x, str)).all():
-                df_fixed[col] = df_fixed[col].astype('string')
-        except:
-            # If any error, skip this column
-            pass
+        # Convert each value to string, handling None values
+        df_fixed[col] = df_fixed[col].apply(lambda x: str(x) if x is not None else None)
+    
+    # Third pass: Special handling for the problematic 'Type' column with dtype objects
+    if 'Type' in df_fixed.columns and df_fixed['Type'].dtype == 'object':
+        # Convert each dtype object to its string representation
+        df_fixed['Type'] = df_fixed['Type'].astype(str)
+    
+    # Fourth pass: For any remaining object columns that might contain dtype objects
+    for col in df_fixed.columns:
+        if df_fixed[col].dtype == 'object':
+            # Check if first non-null value is a dtype object
+            first_val = df_fixed[col].dropna().iloc[0] if not df_fixed[col].dropna().empty else None
+            if first_val is not None and hasattr(first_val, 'name'):
+                # This column likely contains dtype objects, convert all to strings
+                df_fixed[col] = df_fixed[col].astype(str)
     
     return df_fixed
 

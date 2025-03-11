@@ -8,7 +8,7 @@ import plotly.graph_objects as go
 from io import BytesIO
 import math
 
-class Visualizer:
+class EnhancedVisualizer:
     """Class for creating data visualizations"""
     
     def __init__(self, df):

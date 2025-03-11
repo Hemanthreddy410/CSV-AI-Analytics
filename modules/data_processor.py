@@ -9,6 +9,7 @@ from sklearn.impute import SimpleImputer
 import plotly.express as px
 import plotly.graph_objects as go
 import io
+import base64
 
 class DataProcessor:
     """Class for processing and transforming data"""
@@ -76,18 +77,18 @@ class DataProcessor:
         # Column Management Tab
         with processing_tabs[4]:
             self._render_column_management()
-        
-        # Processing History
+
+        # Processing History and Export Options
         if st.session_state.processing_history:
             st.header("Processing History")
-            
-            # Create collapsible section for history
+    
+    # Create collapsible section for history
             with st.expander("View Processing Steps", expanded=False):
                 for i, step in enumerate(st.session_state.processing_history):
                     st.markdown(f"**Step {i+1}:** {step['description']} - {step['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Reset button
-            col1, col2 = st.columns([1, 1])
+    
+    # Reset and Export buttons
+            col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 if st.button("Reset to Original Data", key="reset_data", use_container_width=True):
                     self.df = self.original_df.copy()
@@ -96,8 +97,38 @@ class DataProcessor:
                     st.success("Data reset to original state!")
                     st.rerun()
             with col2:
-                if st.button("Export Processed Data", key="export_data", use_container_width=True):
+                if st.button("Download Processed Data", key="export_data", use_container_width=True):
                     self._export_processed_data()
+            with col3:
+                # Quick export as CSV
+                if self.df is not None and len(self.df) > 0:
+                    csv = self.df.to_csv(index=False)
+                    b64 = base64.b64encode(csv.encode()).decode()
+                    href = f'<a href="data:file/csv;base64,{b64}" download="processed_data.csv" class="download-button" style="text-decoration:none;">Quick Download CSV</a>'
+                    st.markdown(href, unsafe_allow_html=True)
+        
+        # # Processing History
+        # if st.session_state.processing_history:
+        #     st.header("Processing History")
+            
+        #     # Create collapsible section for history
+        #     with st.expander("View Processing Steps", expanded=False):
+        #         for i, step in enumerate(st.session_state.processing_history):
+        #             st.markdown(f"**Step {i+1}:** {step['description']} - {step['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+            
+        #     # Reset button
+        #     col1, col2 = st.columns([1, 1])
+        #     with col1:
+        #         if st.button("Reset to Original Data", key="reset_data", use_container_width=True):
+        #             self.df = self.original_df.copy()
+        #             st.session_state.df = self.original_df.copy()
+        #             st.session_state.processing_history = []
+        #             st.success("Data reset to original state!")
+        #             st.rerun()
+        #     with col2:
+        #         if st.button("Export Processed Data", key="export_data", use_container_width=True):
+        #             st.markdown("---")
+        #             self._export_processed_data()
     
     def _render_data_cleaning(self):
         """Render data cleaning interface"""
