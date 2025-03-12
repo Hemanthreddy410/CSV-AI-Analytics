@@ -50,6 +50,19 @@ class DataWorkflowManager:
             # Save the original file
             df.to_csv(orig_path, index=False)
             
+            # Important: Set this file as processed by default to unblock other tabs
+            # This is the key change that will help with your issue
+            processed_path = os.path.join(st.session_state.data_workflow['temp_dir'], 
+                                       f"processed_{uuid.uuid4().hex}.csv")
+            df.to_csv(processed_path, index=False)
+            st.session_state.data_workflow['processed_file'] = processed_path
+            st.session_state.data_workflow['processing_done'] = True
+            st.session_state.data_workflow['processing_timestamp'] = datetime.datetime.now()
+            
+            # Make sure df is set in session state
+            if 'df' not in st.session_state or st.session_state.df is None:
+                st.session_state.df = df
+            
             return df
             
         except Exception as e:
@@ -76,6 +89,9 @@ class DataWorkflowManager:
             st.session_state.data_workflow['processing_done'] = True
             st.session_state.data_workflow['processing_timestamp'] = datetime.datetime.now()
             
+            # Update the session state DataFrame as well
+            st.session_state.df = df
+            
             return True
             
         except Exception as e:
@@ -93,9 +109,21 @@ class DataWorkflowManager:
             # Return the processed data
             try:
                 processed_path = st.session_state.data_workflow['processed_file']
-                return pd.read_csv(processed_path)
+                if processed_path and os.path.exists(processed_path):
+                    return pd.read_csv(processed_path)
+                else:
+                    # Fall back to session state DataFrame if processed file doesn't exist
+                    if 'df' in st.session_state and st.session_state.df is not None:
+                        return st.session_state.df
+                    # Final fallback to original data
+                    if 'original_df' in st.session_state:
+                        return st.session_state.original_df.copy()
+                    return None
             except Exception as e:
                 st.error(f"Error loading processed data: {str(e)}")
+                # Fallback to session state DataFrame
+                if 'df' in st.session_state and st.session_state.df is not None:
+                    return st.session_state.df
                 return None
         else:
             # Processing not complete
@@ -125,11 +153,12 @@ class DataWorkflowManager:
     
     def reset_workflow(self):
         """Reset the workflow state"""
+        temp_dir = st.session_state.data_workflow['temp_dir']
         st.session_state.data_workflow = {
             'original_file': None,
             'processed_file': None,
             'processing_done': False,
-            'temp_dir': st.session_state.data_workflow['temp_dir'],
+            'temp_dir': temp_dir,
             'processing_timestamp': None
         }
         

@@ -45,6 +45,10 @@ if 'visualizations' not in st.session_state:
 if 'openai_api_key' not in st.session_state:
     st.session_state.openai_api_key = os.getenv("OPENAI_API_KEY", "")
 
+# Flag to prevent infinite rerun loops
+if 'is_processing' not in st.session_state:
+    st.session_state.is_processing = False
+
 def main():
     # Page config
     st.set_page_config(
@@ -81,51 +85,59 @@ def main():
         # Upload section (only if project is selected)
         if st.session_state.current_project is not None:
             st.sidebar.header("📂 Data Source")
+            
+            # Show upload widget
             uploaded_file = st.sidebar.file_uploader("Upload CSV file", type=["csv"])
             
-            if uploaded_file is not None:
+            # Only process upload if not currently processing (prevents loops)
+            if uploaded_file is not None and not st.session_state.is_processing:
                 try:
+                    # Set processing flag to prevent rerun loops
+                    st.session_state.is_processing = True
+                    
                     # Process and display the uploaded file
                     with st.spinner("Processing your data..."):
-                        # Use workflow manager to handle the upload
-                        df = workflow_manager.handle_upload(uploaded_file)
+                        # Read CSV directly without using workflow manager
+                        df = pd.read_csv(uploaded_file)
                         
-                        if df is not None:
-                            # Store in session state
-                            st.session_state.df = df
-                            st.session_state.original_df = df.copy()  # Keep a copy of the original data
+                        # Store in session state
+                        st.session_state.df = df
+                        st.session_state.original_df = df.copy()
+                        
+                        # Store in project data
+                        if st.session_state.current_project in st.session_state.projects:
                             st.session_state.projects[st.session_state.current_project]['data'] = df
-                            
-                            # Reset processing history when new file is uploaded
-                            if 'processing_history' in st.session_state:
-                                st.session_state.processing_history = []
-                            
-                            # Success message
-                            st.sidebar.success(f"✅ File loaded successfully: {uploaded_file.name}")
-                            
-                            # Reset visualizations when new file is uploaded
-                            st.session_state.visualizations = []
-                            
-                            # Reset workflow state (processing not done yet)
-                            workflow_manager.reset_workflow()
                         
+                        # Mark as processed in workflow manager (simplified approach)
+                        if 'data_workflow' not in st.session_state:
+                            st.session_state.data_workflow = {
+                                'original_file': uploaded_file.name,
+                                'processed_file': None,
+                                'processing_done': True,
+                                'temp_dir': None,
+                                'processing_timestamp': None
+                            }
+                        else:
+                            st.session_state.data_workflow['original_file'] = uploaded_file.name
+                            st.session_state.data_workflow['processing_done'] = True
+                        
+                        # Success message
+                        st.sidebar.success(f"✅ File loaded successfully: {uploaded_file.name}")
+                        
+                        # Reset visualizations
+                        st.session_state.visualizations = []
+                        
+                        # Reset processing flag
+                        st.session_state.is_processing = False
+                    
                 except Exception as e:
                     st.sidebar.error(f"Error: {str(e)}")
+                    st.session_state.is_processing = False
             
             # Show data modification status if data exists
-            if st.session_state.df is not None:
-                # Display workflow status
-                status = workflow_manager.get_workflow_status()
-                
-                if status['processing_done']:
-                    st.sidebar.success(f"✅ Data processing completed")
-                    if status['processing_timestamp']:
-                        st.sidebar.info(f"Last processed: {status['processing_timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-                else:
-                    if 'processing_history' in st.session_state and len(st.session_state.processing_history) > 0:
-                        st.sidebar.warning(f"📝 Data partially processed ({len(st.session_state.processing_history)} changes)")
-                    else:
-                        st.sidebar.info("⚠️ Please complete data processing before using other modules")
+            if 'df' in st.session_state and st.session_state.df is not None:
+                # Always show data as loaded
+                st.sidebar.success(f"✅ Data loaded successfully")
     
     # Main content
     if st.session_state.current_project is None:
@@ -167,7 +179,7 @@ def main():
         st.markdown(f"<h1 class='project-title'>Project: {st.session_state.current_project}</h1>", unsafe_allow_html=True)
         
         # Make sure we have data to work with
-        if st.session_state.df is None:
+        if 'df' not in st.session_state or st.session_state.df is None:
             st.info("Please upload a dataset using the sidebar to get started.")
         else:
             # Create tabs for different functionality
@@ -221,43 +233,50 @@ def main():
             
             # Data Processing Tab
             with tabs[1]:
-                processor = DataProcessor(st.session_state.df, workflow_manager)  # Pass session state df and workflow manager
-                processor.render_interface()
+                try:
+                    processor = DataProcessor(st.session_state.df, workflow_manager)
+                    processor.render_interface()
+                except Exception as e:
+                    st.error(f"Error in Data Processing tab: {str(e)}")
             
-            # Check if data processing is completed before allowing access to other tabs
-            status = workflow_manager.get_workflow_status()
-            if not status['processing_done']:
-                # For remaining tabs, show a message prompting to complete data processing first
-                for i in range(2, 6):
-                    with tabs[i]:
-                        st.warning("⚠️ Please complete data processing before using this module.")
-                        st.info("Go to the 'Data Processing' tab and save your processed data.")
-            else:
-                # Get the processed data from workflow manager
-                processed_df = workflow_manager.get_data(require_processed=True)
-                
-                if processed_df is None:
-                    st.error("Error loading processed data. Please try processing your data again.")
-                else:
-                    # Visualization Studio Tab
-                    with tabs[2]:
-                        visualizer = EnhancedVisualizer(processed_df)  # Pass processed df
+            # Just use the current DataFrame for all other tabs
+            current_df = st.session_state.df
+            
+            try:
+                # Visualization Studio Tab
+                with tabs[2]:
+                    try:
+                        visualizer = EnhancedVisualizer(current_df)
                         visualizer.render_interface()
-                    
-                    # Analysis Hub Tab
-                    with tabs[3]:
-                        analyzer = DataAnalyzer(processed_df)  # Pass processed df
+                    except Exception as e:
+                        st.error(f"Error in Visualization Studio: {str(e)}")
+                        st.info("This may be due to missing the kaleido package. You can install it with: pip install -U kaleido")
+                
+                # Analysis Hub Tab
+                with tabs[3]:
+                    try:
+                        analyzer = DataAnalyzer(current_df)
                         analyzer.render_interface()
-                    
-                    # Data Assistant Tab
-                    with tabs[4]:
-                        assistant = AIAssistant(processed_df)  # Pass processed df
+                    except Exception as e:
+                        st.error(f"Error in Analysis Hub: {str(e)}")
+                
+                # Data Assistant Tab
+                with tabs[4]:
+                    try:
+                        assistant = AIAssistant(current_df)
                         assistant.render_interface()
-                    
-                    # GenAI Assistant Tab
-                    with tabs[5]:
-                        gen_ai_assistant = GenAIAssistant(processed_df)  # Pass processed df
+                    except Exception as e:
+                        st.error(f"Error in Data Assistant: {str(e)}")
+                
+                # GenAI Assistant Tab
+                with tabs[5]:
+                    try:
+                        gen_ai_assistant = GenAIAssistant(current_df)
                         gen_ai_assistant.render_interface()
+                    except Exception as e:
+                        st.error(f"Error in GenAI Assistant: {str(e)}")
+            except Exception as e:
+                st.error(f"General error in tabs: {str(e)}")
     
     # Create footer
     create_footer()
