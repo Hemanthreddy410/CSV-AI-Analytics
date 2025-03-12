@@ -14,10 +14,10 @@ from modules.data_analyzer import DataAnalyzer
 from modules.visualization import EnhancedVisualizer
 from modules.ai_assistant import AIAssistant
 from modules.data_processor import DataProcessor
-from modules.gen_ai_assistant import GenAIAssistant  # Add GenAI module
-from modules.utils import load_custom_css, add_logo, encode_image
-from modules.ui_components import create_header, create_footer
+from modules.gen_ai_assistant import GenAIAssistant  
 from modules.utils import load_custom_css, add_logo, encode_image, fix_arrow_dtypes
+from modules.ui_components import create_header, create_footer
+from modules.data_workflow import DataWorkflowManager
 
 # Load environment variables
 load_dotenv()
@@ -66,6 +66,9 @@ def main():
     # Initialize project manager
     project_manager = ProjectManager()
     
+    # Initialize data workflow manager
+    workflow_manager = DataWorkflowManager()
+    
     # Sidebar
     with st.sidebar:
         st.title("DataInsightHub")
@@ -84,32 +87,45 @@ def main():
                 try:
                     # Process and display the uploaded file
                     with st.spinner("Processing your data..."):
-                        df = pd.read_csv(uploaded_file)
+                        # Use workflow manager to handle the upload
+                        df = workflow_manager.handle_upload(uploaded_file)
                         
-                        # Store in session state
-                        st.session_state.df = df
-                        st.session_state.original_df = df.copy()  # Keep a copy of the original data
-                        st.session_state.projects[st.session_state.current_project]['data'] = df
-                        
-                        # Reset processing history when new file is uploaded
-                        if 'processing_history' in st.session_state:
-                            st.session_state.processing_history = []
-                        
-                        # Success message
-                        st.sidebar.success(f"✅ File loaded successfully: {uploaded_file.name}")
-                        
-                        # Reset visualizations when new file is uploaded
-                        st.session_state.visualizations = []
+                        if df is not None:
+                            # Store in session state
+                            st.session_state.df = df
+                            st.session_state.original_df = df.copy()  # Keep a copy of the original data
+                            st.session_state.projects[st.session_state.current_project]['data'] = df
+                            
+                            # Reset processing history when new file is uploaded
+                            if 'processing_history' in st.session_state:
+                                st.session_state.processing_history = []
+                            
+                            # Success message
+                            st.sidebar.success(f"✅ File loaded successfully: {uploaded_file.name}")
+                            
+                            # Reset visualizations when new file is uploaded
+                            st.session_state.visualizations = []
+                            
+                            # Reset workflow state (processing not done yet)
+                            workflow_manager.reset_workflow()
                         
                 except Exception as e:
                     st.sidebar.error(f"Error: {str(e)}")
             
             # Show data modification status if data exists
             if st.session_state.df is not None:
-                if 'processing_history' in st.session_state and len(st.session_state.processing_history) > 0:
-                    st.sidebar.info(f"📝 Data has been modified ({len(st.session_state.processing_history)} changes)")
+                # Display workflow status
+                status = workflow_manager.get_workflow_status()
+                
+                if status['processing_done']:
+                    st.sidebar.success(f"✅ Data processing completed")
+                    if status['processing_timestamp']:
+                        st.sidebar.info(f"Last processed: {status['processing_timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
                 else:
-                    st.sidebar.success("✅ Working with original data")
+                    if 'processing_history' in st.session_state and len(st.session_state.processing_history) > 0:
+                        st.sidebar.warning(f"📝 Data partially processed ({len(st.session_state.processing_history)} changes)")
+                    else:
+                        st.sidebar.info("⚠️ Please complete data processing before using other modules")
     
     # Main content
     if st.session_state.current_project is None:
@@ -202,66 +218,46 @@ def main():
                         st.dataframe(df.describe(), use_container_width=True)
                     else:
                         st.info("No numeric columns found for statistics")
-                
-                # Column details
-                with st.expander("Column Details"):
-                    selected_column = st.selectbox("Select a column for details:", df.columns)
-                    
-                    if selected_column:
-                        col1, col2 = st.columns(2)
-                        
-                        with col1:
-                            st.write(f"**Column:** {selected_column}")
-                            st.write(f"**Type:** {df[selected_column].dtype}")
-                            st.write(f"**Missing Values:** {df[selected_column].isna().sum()}")
-                            st.write(f"**Unique Values:** {df[selected_column].nunique()}")
-                            
-                            if df[selected_column].dtype in ['int64', 'float64']:
-                                st.write(f"**Min:** {df[selected_column].min()}")
-                                st.write(f"**Max:** {df[selected_column].max()}")
-                                st.write(f"**Mean:** {df[selected_column].mean()}")
-                                st.write(f"**Median:** {df[selected_column].median()}")
-                        
-                        with col2:
-                            # Show value counts or histogram depending on data type
-                            if df[selected_column].dtype in ['int64', 'float64']:
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                sns.histplot(df[selected_column].dropna(), kde=True, ax=ax)
-                                plt.title(f'Distribution of {selected_column}')
-                                st.pyplot(fig)
-                            else:
-                                # Show top 10 value counts for non-numeric columns
-                                value_counts = df[selected_column].value_counts().head(10)
-                                fig, ax = plt.subplots(figsize=(10, 6))
-                                value_counts.plot(kind='bar', ax=ax)
-                                plt.title(f'Top 10 Values in {selected_column}')
-                                plt.xticks(rotation=45)
-                                st.pyplot(fig)
             
             # Data Processing Tab
             with tabs[1]:
-                processor = DataProcessor(st.session_state.df)  # Pass session state df
+                processor = DataProcessor(st.session_state.df, workflow_manager)  # Pass session state df and workflow manager
                 processor.render_interface()
             
-            # Visualization Studio Tab
-            with tabs[2]:
-                visualizer = EnhancedVisualizer(st.session_state.df)  # Pass session state df
-                visualizer.render_interface()
-            
-            # Analysis Hub Tab
-            with tabs[3]:
-                analyzer = DataAnalyzer(st.session_state.df)  # Pass session state df
-                analyzer.render_interface()
-            
-            # Data Assistant Tab
-            with tabs[4]:
-                assistant = AIAssistant(st.session_state.df)  # Pass session state df
-                assistant.render_interface()
-            
-            # GenAI Assistant Tab
-            with tabs[5]:
-                gen_ai_assistant = GenAIAssistant(st.session_state.df)  # Pass session state df
-                gen_ai_assistant.render_interface()
+            # Check if data processing is completed before allowing access to other tabs
+            status = workflow_manager.get_workflow_status()
+            if not status['processing_done']:
+                # For remaining tabs, show a message prompting to complete data processing first
+                for i in range(2, 6):
+                    with tabs[i]:
+                        st.warning("⚠️ Please complete data processing before using this module.")
+                        st.info("Go to the 'Data Processing' tab and save your processed data.")
+            else:
+                # Get the processed data from workflow manager
+                processed_df = workflow_manager.get_data(require_processed=True)
+                
+                if processed_df is None:
+                    st.error("Error loading processed data. Please try processing your data again.")
+                else:
+                    # Visualization Studio Tab
+                    with tabs[2]:
+                        visualizer = EnhancedVisualizer(processed_df)  # Pass processed df
+                        visualizer.render_interface()
+                    
+                    # Analysis Hub Tab
+                    with tabs[3]:
+                        analyzer = DataAnalyzer(processed_df)  # Pass processed df
+                        analyzer.render_interface()
+                    
+                    # Data Assistant Tab
+                    with tabs[4]:
+                        assistant = AIAssistant(processed_df)  # Pass processed df
+                        assistant.render_interface()
+                    
+                    # GenAI Assistant Tab
+                    with tabs[5]:
+                        gen_ai_assistant = GenAIAssistant(processed_df)  # Pass processed df
+                        gen_ai_assistant.render_interface()
     
     # Create footer
     create_footer()

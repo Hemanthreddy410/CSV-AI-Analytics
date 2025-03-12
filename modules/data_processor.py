@@ -14,10 +14,11 @@ import base64
 class DataProcessor:
     """Class for processing and transforming data"""
     
-    def __init__(self, df):
-        """Initialize with dataframe"""
+    def __init__(self, df, workflow_manager=None):
+        """Initialize with dataframe and workflow manager"""
         self.df = df
         self.original_df = df.copy() if df is not None else None
+        self.workflow_manager = workflow_manager
         
         # Store processing history
         if 'processing_history' not in st.session_state:
@@ -33,7 +34,7 @@ class DataProcessor:
             if st.session_state.current_project in st.session_state.projects:
                 # The dataframe is already modified by reference
                 # But we should make sure the project data is updated too
-                st.session_state.projects[st.session_state.current_project]['data'] = self.df.copy()
+                st.session_state.projects[st.session_state.current_project]['data'] = self.df
                 
                 # Update last_modified timestamp
                 st.session_state.projects[st.session_state.current_project]['last_modified'] = datetime.datetime.now()
@@ -82,23 +83,35 @@ class DataProcessor:
         if st.session_state.processing_history:
             st.header("Processing History")
     
-    # Create collapsible section for history
+            # Create collapsible section for history
             with st.expander("View Processing Steps", expanded=False):
                 for i, step in enumerate(st.session_state.processing_history):
                     st.markdown(f"**Step {i+1}:** {step['description']} - {step['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
     
-    # Reset and Export buttons
+            # Reset and Export buttons
             col1, col2, col3 = st.columns([1, 1, 1])
             with col1:
                 if st.button("Reset to Original Data", key="reset_data", use_container_width=True):
                     self.df = self.original_df.copy()
                     st.session_state.df = self.original_df.copy()
                     st.session_state.processing_history = []
+                    
+                    # Reset workflow state
+                    if self.workflow_manager is not None:
+                        self.workflow_manager.reset_workflow()
+                        
                     st.success("Data reset to original state!")
                     st.rerun()
             with col2:
-                if st.button("Download Processed Data", key="export_data", use_container_width=True):
-                    self._export_processed_data()
+                if st.button("Save Processed Data", key="save_data", use_container_width=True):
+                    # Save processed data through workflow manager
+                    if self.workflow_manager is not None:
+                        if self.workflow_manager.save_processed_data(self.df):
+                            st.success("✅ Processed data saved successfully!")
+                        else:
+                            st.error("Failed to save processed data")
+                    else:
+                        self._export_processed_data()
             with col3:
                 # Quick export as CSV
                 if self.df is not None and len(self.df) > 0:
@@ -106,29 +119,16 @@ class DataProcessor:
                     b64 = base64.b64encode(csv.encode()).decode()
                     href = f'<a href="data:file/csv;base64,{b64}" download="processed_data.csv" class="download-button" style="text-decoration:none;">Quick Download CSV</a>'
                     st.markdown(href, unsafe_allow_html=True)
-        
-        # Processing History
-        if st.session_state.processing_history:
-            st.header("Processing History")
-            
-            # Create collapsible section for history
-            with st.expander("View Processing Steps", expanded=False):
-                for i, step in enumerate(st.session_state.processing_history):
-                    st.markdown(f"**Step {i+1}:** {step['description']} - {step['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
-            
-            # Reset button
-            col1, col2 = st.columns([1, 1])
-            with col1:
-                if st.button("Reset to Original Data", key="reset_data", use_container_width=True):
-                    self.df = self.original_df.copy()
-                    st.session_state.df = self.original_df.copy()
-                    st.session_state.processing_history = []
-                    st.success("Data reset to original state!")
-                    st.rerun()
-            with col2:
-                if st.button("Export Processed Data", key="export_data", use_container_width=True):
-                    st.markdown("---")
-                    self._export_processed_data()
+                    
+        # Display workflow status if workflow manager exists
+        if self.workflow_manager is not None:
+            status = self.workflow_manager.get_workflow_status()
+            if status['processing_done']:
+                st.success(f"✅ Data processing complete. All modules will use the processed data.")
+                if status['processing_timestamp']:
+                    st.info(f"Last processed: {status['processing_timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+            else:
+                st.warning("⚠️ Data processing not completed. Please process your data before using other modules.")
     
     def _render_data_cleaning(self):
         """Render data cleaning interface"""
@@ -371,7 +371,7 @@ class DataProcessor:
                             st.success(f"Filled missing values with interpolation in {len(columns_to_process)} column(s)")
                     
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.rerun()
                             
                     except Exception as e:
@@ -403,7 +403,7 @@ class DataProcessor:
                         self.df = self.df.drop_duplicates()
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         
                         # Add to processing history
                         rows_removed = orig_shape[0] - self.df.shape[0]
@@ -572,7 +572,7 @@ class DataProcessor:
                                 st.success(f"Replaced {outlier_count} outliers with median ({median_val:.2f}) in column '{col_for_outliers}'")
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.rerun()
                             
                         except Exception as e:
@@ -653,7 +653,7 @@ class DataProcessor:
                     })
                     
                     # Update the dataframe in session state
-                    st.session_state.df = self.df
+                    self._update_session_state()
                     
                     st.success(f"Converted column '{col_to_convert}' to {target_type}")
                     st.rerun()
@@ -1031,7 +1031,7 @@ class DataProcessor:
                             st.success(f"{'Created new column' if create_new_col else 'Transformed'} '{output_col}' with normalization")
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.rerun()
                         
                     except Exception as e:
@@ -1321,7 +1321,7 @@ class DataProcessor:
                             st.success(f"{'Created new column' if create_new_col else 'Transformed'} '{output_col}' with string cleaning")
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.rerun()
                         
                     except Exception as e:
@@ -1397,7 +1397,7 @@ class DataProcessor:
                             })
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.success(f"Converted '{date_col}' to datetime format")
                             st.rerun()
                             
@@ -1457,7 +1457,7 @@ class DataProcessor:
                         })
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.success(f"Extracted {len(date_features)} date features from '{date_col}'")
                         st.rerun()
                         
@@ -1517,7 +1517,7 @@ class DataProcessor:
                             })
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.success(f"Calculated time difference in {time_units.lower()} as '{result_name}'")
                             st.rerun()
                             
@@ -1529,152 +1529,11 @@ class DataProcessor:
     def _render_feature_engineering(self):
         """Render feature engineering interface"""
         st.subheader("Feature Engineering")
+        st.info("This feature allows you to create new columns based on mathematical operations, string operations, and other transformations.")
         
-        # Create columns for organized layout
-        col1, col2 = st.columns(2)
-        
-        with col1:
-            st.markdown("### Create New Features")
-            
-            # Get all columns
-            all_cols = self.df.columns.tolist()
-            num_cols = self.df.select_dtypes(include=['number']).columns.tolist()
-            
-            # Feature creation methods
-            feature_method = st.selectbox(
-                "Feature creation method:",
-                [
-                    "Arithmetic Operation",
-                    "Mathematical Function",
-                    "String Operation",
-                    "Conditional Logic",
-                    "Aggregation by Group",
-                    "Rolling Window",
-                    "Polynomial Features",
-                    "Interaction Terms"
-                ],
-                key="feature_method"
-            )
-            
-            # Create new feature options based on method
-            if feature_method == "Arithmetic Operation":
-                # Implementation details here...
-                pass  # This is a placeholder - the full implementation would go here
-            
-            if num_cols and len(num_cols) > 1:
-                st.markdown("#### Feature Correlation")
-                
-                # Let user select columns or use all
-                use_all_numeric = st.checkbox("Use all numeric columns", value=True)
-                
-                if use_all_numeric:
-                    corr_cols = num_cols
-                else:
-                    corr_cols = st.multiselect("Select columns for correlation:", num_cols, default=num_cols[:min(5, len(num_cols))])
-                
-                if corr_cols and len(corr_cols) > 1:
-                    # Calculate correlation
-                    corr = self.df[corr_cols].corr()
-                    
-                    # Create heatmap
-                    fig = px.imshow(
-                        corr, 
-                        text_auto=".2f", 
-                        color_continuous_scale="RdBu_r",
-                        title="Feature Correlation",
-                        aspect="auto"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    # Show strongest correlations
-                    st.markdown("#### Strongest Correlations")
-                    
-                    # Create a list of correlations with feature pairs
-                    corr_pairs = []
-                    for i in range(len(corr_cols)):
-                        for j in range(i+1, len(corr_cols)):
-                            corr_val = corr.iloc[i, j]
-                            corr_pairs.append({
-                                'Feature 1': corr.index[i],
-                                'Feature 2': corr.columns[j],
-                                'Correlation': corr_val,
-                                'Abs Correlation': abs(corr_val)
-                            })
-                    
-                    # Convert to dataframe and sort
-                    corr_df = pd.DataFrame(corr_pairs)
-                    top_corr = corr_df.sort_values('Abs Correlation', ascending=False).head(10)
-                    
-                    st.dataframe(
-                        top_corr[['Feature 1', 'Feature 2', 'Correlation']].reset_index(drop=True),
-                        use_container_width=True
-                    )
-            
-            # Feature importance estimation
-            if num_cols and len(num_cols) > 1:
-                st.markdown("#### Feature Importance Estimation")
-                st.info("Estimate feature importance for classification or regression tasks.")
-                
-                # Select target variable
-                target_col = st.selectbox("Select target variable:", num_cols)
-                
-                # Get feature columns (excluding target)
-                feature_cols = [col for col in num_cols if col != target_col]
-                
-                # Select task type
-                task_type = st.radio("Task type:", ["Classification", "Regression"], horizontal=True)
-                
-                if st.button("Estimate Feature Importance", use_container_width=True):
-                    try:
-                        from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-                        from sklearn.preprocessing import StandardScaler
-                        
-                        # Prepare data
-                        X = self.df[feature_cols].fillna(self.df[feature_cols].mean())
-                        y = self.df[target_col].fillna(self.df[target_col].mean())
-                        
-                        # Scale features
-                        scaler = StandardScaler()
-                        X_scaled = scaler.fit_transform(X)
-                        
-                        # Train a model to get feature importance
-                        if task_type == "Classification":
-                            model = RandomForestClassifier(n_estimators=50, n_jobs=-1, random_state=42, min_samples_leaf=3)
-                        else:  # Regression
-                            model = RandomForestRegressor(n_estimators=50, n_jobs=-1, random_state=42, min_samples_leaf=3)
-                        
-                        with st.spinner("Estimating feature importance..."):
-                            model.fit(X_scaled, y)
-                            
-                            # Get feature importance
-                            importances = model.feature_importances_
-                            importance_df = pd.DataFrame({
-                                'Feature': feature_cols,
-                                'Importance': importances
-                            })
-                            
-                            # Sort by importance
-                            importance_df = importance_df.sort_values('Importance', ascending=False)
-                            
-                            # Create bar chart
-                            fig = px.bar(
-                                importance_df,
-                                x='Importance',
-                                y='Feature',
-                                orientation='h',
-                                title="Estimated Feature Importance",
-                                labels={'Importance': 'Relative Importance', 'Feature': 'Feature'},
-                                color='Importance',
-                                color_continuous_scale="Blues"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
-                            
-                            # Display table
-                            st.dataframe(importance_df.reset_index(drop=True), use_container_width=True)
-                        
-                    except Exception as e:
-                        st.error(f"Error estimating feature importance: {str(e)}")
-
+        # Placeholder for actual implementation
+        st.warning("Feature Engineering module is under development. Basic operations are available in the Data Transformation tab.")
+    
     def _render_data_filtering(self):
         """Render data filtering interface"""
         st.subheader("Data Filtering")
@@ -1961,7 +1820,7 @@ class DataProcessor:
                     })
                     
                     # Update the dataframe in session state
-                    st.session_state.df = self.df
+                    self._update_session_state()
                     
                     st.success(f"Filter applied: {rows_filtered} rows removed, {self.df.shape[0]} remaining")
                     st.rerun()
@@ -2021,7 +1880,7 @@ class DataProcessor:
                         })
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.success(f"Applied random sampling: {sample_size} rows selected")
                         st.rerun()
                         
@@ -2029,16 +1888,138 @@ class DataProcessor:
                         st.error(f"Error applying sampling: {str(e)}")
             
             elif sample_method == "Stratified Sample":
-                # Implementation details here...
-                pass
+                # Stratified sampling options
+                strat_col = st.selectbox(
+                    "Select column to stratify by:",
+                    self.df.select_dtypes(include=['object', 'category']).columns.tolist()
+                )
+                
+                sample_pct = st.slider("Percentage to sample from each stratum:", 1, 100, 10)
+                
+                if st.button("Apply Stratified Sampling", use_container_width=True):
+                    try:
+                        # Store original shape for reporting
+                        orig_shape = self.df.shape
+                        
+                        # Apply stratified sampling
+                        sampled_dfs = []
+                        for value, group in self.df.groupby(strat_col):
+                            sample_size = int(len(group) * sample_pct / 100)
+                            if sample_size > 0:
+                                sampled_dfs.append(group.sample(n=min(sample_size, len(group))))
+                        
+                        # Combine samples
+                        self.df = pd.concat(sampled_dfs)
+                        
+                        # Add to processing history
+                        st.session_state.processing_history.append({
+                            "description": f"Applied stratified sampling by '{strat_col}': {self.df.shape[0]} rows selected",
+                            "timestamp": datetime.datetime.now(),
+                            "type": "sampling",
+                            "details": {
+                                "method": "stratified",
+                                "stratify_column": strat_col,
+                                "percentage": sample_pct,
+                                "original_rows": orig_shape[0],
+                                "sampled_rows": self.df.shape[0]
+                            }
+                        })
+                        
+                        # Update the dataframe in session state
+                        self._update_session_state()
+                        st.success(f"Applied stratified sampling: {self.df.shape[0]} rows selected")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error applying stratified sampling: {str(e)}")
             
             elif sample_method == "Systematic Sample":
-                # Implementation details here...
-                pass
+                # Systematic sampling options
+                k = st.number_input(
+                    "Select every kth row:",
+                    min_value=2,
+                    max_value=len(self.df),
+                    value=min(10, len(self.df))
+                )
+                
+                if st.button("Apply Systematic Sampling", use_container_width=True):
+                    try:
+                        # Store original shape for reporting
+                        orig_shape = self.df.shape
+                        
+                        # Apply systematic sampling
+                        indices = range(0, len(self.df), k)
+                        self.df = self.df.iloc[indices]
+                        
+                        # Add to processing history
+                        st.session_state.processing_history.append({
+                            "description": f"Applied systematic sampling (every {k}th row): {len(self.df)} rows selected",
+                            "timestamp": datetime.datetime.now(),
+                            "type": "sampling",
+                            "details": {
+                                "method": "systematic",
+                                "k": k,
+                                "original_rows": orig_shape[0],
+                                "sampled_rows": self.df.shape[0]
+                            }
+                        })
+                        
+                        # Update the dataframe in session state
+                        self._update_session_state()
+                        st.success(f"Applied systematic sampling: {len(self.df)} rows selected")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error applying systematic sampling: {str(e)}")
             
             elif sample_method == "First/Last N Rows":
-                # Implementation details here...
-                pass
+                # First/Last N rows options
+                select_type = st.radio(
+                    "Select:",
+                    ["First N Rows", "Last N Rows"],
+                    horizontal=True
+                )
+                
+                n_rows = st.number_input(
+                    "Number of rows:",
+                    min_value=1,
+                    max_value=len(self.df),
+                    value=min(100, len(self.df))
+                )
+                
+                if st.button("Apply Selection", use_container_width=True):
+                    try:
+                        # Store original shape for reporting
+                        orig_shape = self.df.shape
+                        
+                        # Apply selection
+                        if select_type == "First N Rows":
+                            self.df = self.df.head(n_rows)
+                            selection_type = "first"
+                        else:
+                            self.df = self.df.tail(n_rows)
+                            selection_type = "last"
+                        
+                        # Add to processing history
+                        st.session_state.processing_history.append({
+                            "description": f"Selected {selection_type} {n_rows} rows",
+                            "timestamp": datetime.datetime.now(),
+                            "type": "sampling",
+                            "details": {
+                                "method": selection_type,
+                                "n_rows": n_rows,
+                                "original_rows": orig_shape[0],
+                                "sampled_rows": self.df.shape[0]
+                            }
+                        })
+                        
+                        # Update the dataframe in session state
+                        self._update_session_state()
+                        st.success(f"Selected {selection_type} {n_rows} rows")
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error selecting rows: {str(e)}")
             
             # Data preview after filtering/sampling
             st.markdown("### Data Preview")
@@ -2134,7 +2115,7 @@ class DataProcessor:
                         })
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.success(f"Renamed {len(rename_dict)} columns")
                         st.rerun()
                         
@@ -2268,7 +2249,7 @@ class DataProcessor:
                             })
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.success(f"Renamed {len(rename_dict)} columns")
                             st.rerun()
                         else:
@@ -2330,7 +2311,7 @@ class DataProcessor:
                         })
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.success(op_description)
                         st.rerun()
                         
@@ -2384,7 +2365,7 @@ class DataProcessor:
                         })
                         
                         # Update the dataframe in session state
-                        st.session_state.df = self.df
+                        self._update_session_state()
                         st.success("Columns reordered successfully")
                         st.rerun()
                         
@@ -2563,7 +2544,7 @@ class DataProcessor:
                             })
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.success(f"Split column '{split_col}' into {num_new_cols} new columns")
                             st.rerun()
                             
@@ -2615,7 +2596,7 @@ class DataProcessor:
                             })
                             
                             # Update the dataframe in session state
-                            st.session_state.df = self.df
+                            self._update_session_state()
                             st.success(f"Merged columns into new column '{new_col_name}'")
                             st.rerun()
                             
