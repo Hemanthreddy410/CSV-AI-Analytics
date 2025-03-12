@@ -2869,4 +2869,4 @@ class DataProcessor:
                     })
                     
                 except Exception as e:
-                    st.error(f"Error exporting to Pickle: {str(e)}"
+                    st.error(f"Error exporting to Pickle: {str(e)}")
