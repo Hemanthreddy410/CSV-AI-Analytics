@@ -326,7 +326,7 @@ def render_charts_tab():
         )
         
         # Export button
-        if st.button("Export Chart",key="export_interactive_chart", use_container_width=True):
+        if st.button("Export Chart",key="export_interactive_charts", use_container_width=True):
             if export_format == "HTML":
                 # Export as HTML file
                 buffer = StringIO()
@@ -658,7 +658,7 @@ def render_interactive_plots_tab():
     with st.expander("Chart Settings", expanded=False):
         # Title and size
         chart_title = st.text_input("Chart title:", fig.layout.title.text)
-        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_width")
+        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_plots")
         height = st.slider("Chart height:", 300, 1000, 600)
         
         # Theme selection
@@ -1166,7 +1166,7 @@ def render_statistical_plots_tab():
         )
         
         # Export button
-        if st.button("Export Chart",key="export_interactive_chart", use_container_width=True):
+        if st.button("Export Chart",key="export_interactive_statistical_plots", use_container_width=True):
             if export_format == "HTML":
                 # Export as HTML file
                 buffer = StringIO()
@@ -1466,8 +1466,8 @@ def render_geospatial_plots_tab():
     with st.expander("Chart Settings", expanded=False):
         # Title and size
         chart_title = st.text_input("Chart title:", fig.layout.title.text)
-        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_width")
-        height = st.slider("Chart height:", 300, 1000, 600,key="statistical_chart_height")
+        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_geospatial_plots")
+        height = st.slider("Chart height:", 300, 1000, 600,key="statistical_chart_geospatial_plots")
         
         # Map center and zoom
         zoom_level = st.slider("Zoom level:", 1, 20, 3)
@@ -2214,7 +2214,7 @@ def render_custom_viz_tab():
     with st.expander("Chart Settings", expanded=False):
         # Title and size
         chart_title = st.text_input("Chart title:", fig.layout.title.text if hasattr(fig.layout, 'title') and hasattr(fig.layout.title, 'text') else "")
-        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_width")
+        width = st.slider("Chart width:", 400, 1200, 800, key="interactive_chart_custom_viz")
         height = st.slider("Chart height:", 300, 1000, 600)
         
         # Theme selection
@@ -2244,7 +2244,7 @@ def render_custom_viz_tab():
         )
         
         # Export button
-        if st.button("Export Chart", key="export_interactive_chart", use_container_width=True):
+        if st.button("Export Chart", key="export_interactive_custom_viz", use_container_width=True):
             if export_format == "HTML":
                 # Export as HTML file
                 buffer = StringIO()
