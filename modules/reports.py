@@ -1,3 +1,15 @@
+import streamlit as st
+import pandas as pd
+import numpy as np
+import plotly.express as px
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+from io import StringIO
+import datetime
+import markdown  # Optional, used for HTML export
+from statsmodels.tsa.seasonal import seasonal_decompose  # For trend decomposition
+import scipy.stats  # For statistical tests and distributions
+
 def render_reports():
     """Render reports section"""
     st.header("Reports")
