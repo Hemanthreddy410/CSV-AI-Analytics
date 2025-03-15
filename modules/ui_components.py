@@ -498,7 +498,8 @@ class DataProcessor:
                 dup_keep = st.radio(
                     "When removing duplicates, keep:",
                     ["First occurrence", "Last occurrence", "None (remove all duplicates)"],
-                    horizontal=True
+                    horizontal=True,
+                    key="dup_keep_radio",
                 )
                 
                 keep_map = {
@@ -989,7 +990,8 @@ class DataProcessor:
                     power = st.slider("Power value:", -3.0, 3.0, 1.0, 0.1)
                 
                 elif transform_method == "Cumulative Sum/Product":
-                    cum_method = st.radio("Method:", ["Cumulative Sum", "Cumulative Product"], horizontal=True)
+                    cum_method = st.radio("Method:", ["Cumulative Sum", "Cumulative Product"], horizontal=True),
+                    key="cum_method"
                 
                 # Create new column or replace
                 create_new_col = st.checkbox("Create new column", value=True)

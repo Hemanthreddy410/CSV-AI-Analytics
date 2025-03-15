@@ -11,6 +11,7 @@ from io import StringIO, BytesIO
 import base64
 import re
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+from modules.gen_ai_assistant import GenAIAssistant
 
 # Import custom modules
 from modules.ui_helper import load_custom_css, create_header
@@ -31,8 +32,8 @@ from modules.data_processor import render_data_processing
 from modules.visualization import render_visualization
 from modules.analysis import render_analysis
 from modules.reports import render_reports
-from modules.dashboard import render_dashboard
-
+# from modules.dashboard import render_dashboard
+from modules.dashboard import render_dashboard, render_exploratory_report, render_trend_analysis, render_distribution_analysis
 # App configuration
 APP_TITLE = "CSV AI Analytics"
 APP_SUBTITLE = "Analyze and visualize your data with ease"
@@ -267,7 +268,8 @@ def render_main_content():
             "📊 Visualization", 
             "📈 Analysis",
             "📝 Reports",
-            "🎛️ Dashboard"
+            "🎛️ Dashboard",
+            "🤖 Gen AI Assistant"
         ])
         
         # Data Overview Tab
@@ -293,6 +295,10 @@ def render_main_content():
         # Dashboard Tab
         with tabs[5]:
             render_dashboard()
+            
+        # Gen AI Assistant Tab
+        with tabs[6]:
+            render_genai_assistant()
     else:
         # Show welcome message and data upload options
         render_welcome()
@@ -351,6 +357,17 @@ def render_welcome():
         if st.button("📝 Create New Project", key="create_project_welcome", use_container_width=True):
             # This just highlights the project creation
             st.info("Use the project management section in the sidebar to create a new project.")
+
+def render_genai_assistant():
+    """Render GenAI assistant interface"""
+    if st.session_state.df is not None:
+        # Create GenAI assistant instance
+        assistant = AIAssistant(st.session_state.df)
+        
+        # Render the interface
+        assistant.render_interface()
+    else:
+        st.warning("Please upload a dataset first to use the GenAI Assistant.")
 
 if __name__ == "__main__":
     main()

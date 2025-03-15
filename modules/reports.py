@@ -9,10 +9,16 @@ import datetime
 import markdown  # Optional, used for HTML export
 from statsmodels.tsa.seasonal import seasonal_decompose  # For trend decomposition
 import scipy.stats  # For statistical tests and distributions
+from modules.data_exporter import DataExporter
 
 def render_reports():
     """Render reports section"""
     st.header("Reports")
+    
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
     
     # Create tabs for different report types
     report_tabs = st.tabs([
@@ -42,25 +48,30 @@ def render_summary_report():
     """Render summary report tab"""
     st.subheader("Summary Report")
     
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
+    
     # Report configuration
     st.write("Generate a comprehensive summary report of your dataset.")
     
     with st.expander("Report Configuration", expanded=True):
         # Report title
-        report_title = st.text_input("Report Title:", "Data Summary Report")
+        report_title = st.text_input("Report Title:", "Data Summary Report", key="summary_report_title")
         
         # Include sections
         st.write("Select sections to include:")
         
-        include_dataset_info = st.checkbox("Dataset Information", value=True)
-        include_column_summary = st.checkbox("Column Summary", value=True)
-        include_numeric_summary = st.checkbox("Numeric Data Summary", value=True)
-        include_categorical_summary = st.checkbox("Categorical Data Summary", value=True)
-        include_missing_data = st.checkbox("Missing Data Analysis", value=True)
-        include_charts = st.checkbox("Include Charts", value=True)
+        include_dataset_info = st.checkbox("Dataset Information", value=True, key="summary_include_dataset_info")
+        include_column_summary = st.checkbox("Column Summary", value=True, key="summary_include_column_summary")
+        include_numeric_summary = st.checkbox("Numeric Data Summary", value=True, key="summary_include_numeric_summary")
+        include_categorical_summary = st.checkbox("Categorical Data Summary", value=True, key="summary_include_categorical_summary")
+        include_missing_data = st.checkbox("Missing Data Analysis", value=True, key="summary_include_missing_data")
+        include_charts = st.checkbox("Include Charts", value=True, key="summary_include_charts")
     
     # Generate report
-    if st.button("Generate Summary Report", use_container_width=True):
+    if st.button("Generate Summary Report", use_container_width=True, key="summary_generate_button"):
         # Create a report markdown string
         report = f"# {report_title}\n\n"
         report += f"**Date Generated:** {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -230,13 +241,16 @@ def render_summary_report():
                     
                     # Create histogram for each selected column
                     for col in selected_num_cols:
-                        fig = px.histogram(
-                            st.session_state.df,
-                            x=col,
-                            title=f"Distribution of {col}",
-                            marginal="box"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                        try:
+                            fig = px.histogram(
+                                st.session_state.df,
+                                x=col,
+                                title=f"Distribution of {col}",
+                                marginal="box"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Could not create histogram for column '{col}': {str(e)}")
             
             # Missing data visualization
             if include_missing_data:
@@ -253,15 +267,18 @@ def render_summary_report():
                 
                 if len(cols_with_missing) > 0:
                     # Create missing values chart
-                    fig = px.bar(
-                        cols_with_missing,
-                        x='Column',
-                        y='Missing %',
-                        title='Missing Values by Column (%)',
-                        color='Missing %',
-                        color_continuous_scale="Reds"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    try:
+                        fig = px.bar(
+                            cols_with_missing,
+                            x='Column',
+                            y='Missing %',
+                            title='Missing Values by Column (%)',
+                            color='Missing %',
+                            color_continuous_scale="Reds"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Could not create missing values chart: {str(e)}")
         
         # Export options
         st.subheader("Export Report")
@@ -275,7 +292,8 @@ def render_summary_report():
                 data=report,
                 file_name=f"{report_title.replace(' ', '_').lower()}.md",
                 mime="text/markdown",
-                use_container_width=True
+                use_container_width=True,
+                key="summary_download_md"
             )
         
         with col2:
@@ -289,7 +307,8 @@ def render_summary_report():
                     data=html,
                     file_name=f"{report_title.replace(' ', '_').lower()}.html",
                     mime="text/html",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="summary_download_html"
                 )
             except:
                 st.warning("HTML export requires the markdown package. Try downloading as Markdown instead.")
@@ -298,19 +317,24 @@ def render_custom_report():
     """Render custom report tab"""
     st.subheader("Custom Report")
     
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
+    
     # Report configuration
     st.write("Build a custom report with selected sections and visualizations.")
     
     with st.expander("Report Settings", expanded=True):
         # Report title and description
-        report_title = st.text_input("Report Title:", "Custom Data Analysis Report")
-        report_description = st.text_area("Report Description:", "This report provides a custom analysis of the dataset.")
+        report_title = st.text_input("Report Title:", "Custom Data Analysis Report", key="custom_report_title")
+        report_description = st.text_area("Report Description:", "This report provides a custom analysis of the dataset.", key="custom_report_description")
         
         # Author information
-        include_author = st.checkbox("Include Author Information", value=False)
+        include_author = st.checkbox("Include Author Information", value=False, key="custom_include_author")
         if include_author:
-            author_name = st.text_input("Author Name:")
-            author_info = st.text_input("Additional Info (e.g., email, organization):")
+            author_name = st.text_input("Author Name:", key="custom_author_name")
+            author_info = st.text_input("Additional Info (e.g., email, organization):", key="custom_author_info")
     
     # Section selection
     st.subheader("Report Sections")
@@ -319,14 +343,14 @@ def render_custom_report():
     selected_sections = []
     
     # Dataset Overview section
-    include_overview = st.checkbox("Dataset Overview", value=True)
+    include_overview = st.checkbox("Dataset Overview", value=True, key="custom_include_overview")
     if include_overview:
         selected_sections.append("overview")
         with st.container():
             st.markdown("##### Dataset Overview Options")
-            include_basic_stats = st.checkbox("Basic Statistics", value=True)
-            include_data_types = st.checkbox("Data Types Summary", value=True)
-            include_sample_data = st.checkbox("Sample Data Preview", value=True)
+            include_basic_stats = st.checkbox("Basic Statistics", value=True, key="custom_include_basic_stats")
+            include_data_types = st.checkbox("Data Types Summary", value=True, key="custom_include_data_types")
+            include_sample_data = st.checkbox("Sample Data Preview", value=True, key="custom_include_sample_data")
             
             # Store options
             overview_options = {
@@ -338,7 +362,7 @@ def render_custom_report():
         overview_options = {}
     
     # Numeric Data Analysis section
-    include_numeric = st.checkbox("Numeric Data Analysis", value=True)
+    include_numeric = st.checkbox("Numeric Data Analysis", value=True, key="custom_include_numeric")
     if include_numeric:
         selected_sections.append("numeric")
         with st.container():
@@ -354,13 +378,14 @@ def render_custom_report():
                 selected_num_cols = st.multiselect(
                     "Select columns to analyze:",
                     num_cols,
-                    default=num_cols[:min(5, len(num_cols))]
+                    default=num_cols[:min(5, len(num_cols))],
+                    key="custom_selected_num_cols"
                 )
                 
                 # Chart types
-                include_histograms = st.checkbox("Include Histograms", value=True)
-                include_boxplots = st.checkbox("Include Box Plots", value=True)
-                include_descriptive = st.checkbox("Include Descriptive Statistics", value=True)
+                include_histograms = st.checkbox("Include Histograms", value=True, key="custom_include_histograms")
+                include_boxplots = st.checkbox("Include Box Plots", value=True, key="custom_include_boxplots")
+                include_descriptive = st.checkbox("Include Descriptive Statistics", value=True, key="custom_include_descriptive")
                 
                 # Store options
                 numeric_options = {
@@ -373,7 +398,7 @@ def render_custom_report():
         numeric_options = {}
     
     # Categorical Data Analysis section
-    include_categorical = st.checkbox("Categorical Data Analysis", value=True)
+    include_categorical = st.checkbox("Categorical Data Analysis", value=True, key="custom_include_categorical")
     if include_categorical:
         selected_sections.append("categorical")
         with st.container():
@@ -389,16 +414,17 @@ def render_custom_report():
                 selected_cat_cols = st.multiselect(
                     "Select columns to analyze:",
                     cat_cols,
-                    default=cat_cols[:min(5, len(cat_cols))]
+                    default=cat_cols[:min(5, len(cat_cols))],
+                    key="custom_selected_cat_cols"
                 )
                 
                 # Chart types
-                include_bar_charts = st.checkbox("Include Bar Charts", value=True)
-                include_pie_charts = st.checkbox("Include Pie Charts", value=False)
-                include_frequency = st.checkbox("Include Frequency Tables", value=True)
+                include_bar_charts = st.checkbox("Include Bar Charts", value=True, key="custom_include_bar_charts")
+                include_pie_charts = st.checkbox("Include Pie Charts", value=False, key="custom_include_pie_charts")
+                include_frequency = st.checkbox("Include Frequency Tables", value=True, key="custom_include_frequency")
                 
                 # Maximum categories to display
-                max_categories = st.slider("Maximum categories per chart:", 5, 30, 10)
+                max_categories = st.slider("Maximum categories per chart:", 5, 30, 10, key="custom_max_categories")
                 
                 # Store options
                 categorical_options = {
@@ -412,7 +438,7 @@ def render_custom_report():
         categorical_options = {}
     
     # Correlation Analysis section
-    include_correlation = st.checkbox("Correlation Analysis", value=True)
+    include_correlation = st.checkbox("Correlation Analysis", value=True, key="custom_include_correlation")
     if include_correlation:
         selected_sections.append("correlation")
         with st.container():
@@ -428,21 +454,23 @@ def render_custom_report():
                 selected_corr_cols = st.multiselect(
                     "Select columns for correlation analysis:",
                     num_cols,
-                    default=num_cols[:min(7, len(num_cols))]
+                    default=num_cols[:min(7, len(num_cols))],
+                    key="custom_selected_corr_cols"
                 )
                 
                 # Correlation method
                 corr_method = st.selectbox(
                     "Correlation method:",
-                    ["Pearson", "Spearman", "Kendall"]
+                    ["Pearson", "Spearman", "Kendall"],
+                    key="custom_corr_method"
                 )
                 
                 # Visualization options
-                include_heatmap = st.checkbox("Include Correlation Heatmap", value=True)
-                include_corr_table = st.checkbox("Include Correlation Table", value=True)
+                include_heatmap = st.checkbox("Include Correlation Heatmap", value=True, key="custom_include_heatmap")
+                include_corr_table = st.checkbox("Include Correlation Table", value=True, key="custom_include_corr_table")
                 
                 # Correlation threshold
-                corr_threshold = st.slider("Highlight correlations with absolute value above:", 0.0, 1.0, 0.7)
+                corr_threshold = st.slider("Highlight correlations with absolute value above:", 0.0, 1.0, 0.7, key="custom_corr_threshold")
                 
                 # Store options
                 correlation_options = {
@@ -456,16 +484,16 @@ def render_custom_report():
         correlation_options = {}
     
     # Missing Data Analysis section
-    include_missing = st.checkbox("Missing Data Analysis", value=True)
+    include_missing = st.checkbox("Missing Data Analysis", value=True, key="custom_include_missing")
     if include_missing:
         selected_sections.append("missing")
         with st.container():
             st.markdown("##### Missing Data Analysis Options")
             
             # Visualization options
-            include_missing_bar = st.checkbox("Include Missing Values Bar Chart", value=True)
-            include_missing_heatmap = st.checkbox("Include Missing Values Heatmap", value=False)
-            include_missing_table = st.checkbox("Include Missing Values Table", value=True)
+            include_missing_bar = st.checkbox("Include Missing Values Bar Chart", value=True, key="custom_include_missing_bar")
+            include_missing_heatmap = st.checkbox("Include Missing Values Heatmap", value=False, key="custom_include_missing_heatmap")
+            include_missing_table = st.checkbox("Include Missing Values Table", value=True, key="custom_include_missing_table")
             
             # Store options
             missing_options = {
@@ -477,14 +505,14 @@ def render_custom_report():
         missing_options = {}
     
     # Additional Custom Section
-    include_custom = st.checkbox("Custom Text Section", value=False)
+    include_custom = st.checkbox("Custom Text Section", value=False, key="custom_include_custom_section")
     if include_custom:
         selected_sections.append("custom")
         with st.container():
             st.markdown("##### Custom Section Content")
             
-            custom_section_title = st.text_input("Section Title:", "Additional Insights")
-            custom_section_content = st.text_area("Section Content:", "Enter your custom analysis and insights here.")
+            custom_section_title = st.text_input("Section Title:", "Additional Insights", key="custom_section_title")
+            custom_section_content = st.text_area("Section Content:", "Enter your custom analysis and insights here.", key="custom_section_content")
             
             # Store options
             custom_options = {
@@ -495,7 +523,7 @@ def render_custom_report():
         custom_options = {}
     
     # Generate report
-    if st.button("Generate Custom Report", use_container_width=True):
+    if st.button("Generate Custom Report", use_container_width=True, key="custom_generate_button"):
         # Create a report markdown string
         report = f"# {report_title}\n\n"
         
@@ -766,35 +794,41 @@ def render_custom_report():
                     st.markdown("#### Histograms")
                     # Show one example histogram
                     example_col = selected_num_cols[0]
-                    fig = px.histogram(
-                        st.session_state.df,
-                        x=example_col,
-                        title=f"Distribution of {example_col}",
-                        marginal="box"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    if len(selected_num_cols) > 1:
-                        st.info(f"Histograms for all {len(selected_num_cols)} selected numeric columns will be included in the exported report.")
+                    try:
+                        fig = px.histogram(
+                            st.session_state.df,
+                            x=example_col,
+                            title=f"Distribution of {example_col}",
+                            marginal="box"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        if len(selected_num_cols) > 1:
+                            st.info(f"Histograms for all {len(selected_num_cols)} selected numeric columns will be included in the exported report.")
+                    except Exception as e:
+                        st.warning(f"Could not create histogram for column '{example_col}': {str(e)}")
                 
                 if numeric_options.get("boxplots", False) and selected_num_cols:
                     st.markdown("#### Box Plots")
                     # Create box plots
-                    fig = go.Figure()
-                    
-                    for col in selected_num_cols[:3]:  # Show up to 3 columns
-                        fig.add_trace(
-                            go.Box(
-                                y=st.session_state.df[col],
-                                name=col
+                    try:
+                        fig = go.Figure()
+                        
+                        for col in selected_num_cols[:3]:  # Show up to 3 columns
+                            fig.add_trace(
+                                go.Box(
+                                    y=st.session_state.df[col],
+                                    name=col
+                                )
                             )
-                        )
-                    
-                    fig.update_layout(title="Box Plots of Numeric Columns")
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    if len(selected_num_cols) > 3:
-                        st.info(f"Box plots for all {len(selected_num_cols)} selected numeric columns will be included in the exported report.")
+                        
+                        fig.update_layout(title="Box Plots of Numeric Columns")
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        if len(selected_num_cols) > 3:
+                            st.info(f"Box plots for all {len(selected_num_cols)} selected numeric columns will be included in the exported report.")
+                    except Exception as e:
+                        st.warning(f"Could not create box plots: {str(e)}")
             
             # Categorical visualizations
             if "categorical" in selected_sections:
@@ -806,39 +840,46 @@ def render_custom_report():
                     # Show one example bar chart
                     example_col = selected_cat_cols[0]
                     
-                    # Get top categories
-                    value_counts = st.session_state.df[example_col].value_counts().nlargest(max_categories)
-                    
-                    # Create bar chart
-                    fig = px.bar(
-                        x=value_counts.index,
-                        y=value_counts.values,
-                        title=f"Frequency of {example_col} Categories",
-                        labels={"x": example_col, "y": "Count"}
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    if len(selected_cat_cols) > 1:
-                        st.info(f"Bar charts for all {len(selected_cat_cols)} selected categorical columns will be included in the exported report.")
+                    try:
+                        # Get top categories
+                        value_counts = st.session_state.df[example_col].value_counts().nlargest(max_categories)
+                        
+                        # Create bar chart
+                        fig = px.bar(
+                            value_counts.reset_index(),
+                            x="index",
+                            y=example_col,
+                            title=f"Frequency of {example_col} Categories",
+                            labels={"index": example_col, example_col: "Count"}
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        if len(selected_cat_cols) > 1:
+                            st.info(f"Bar charts for all {len(selected_cat_cols)} selected categorical columns will be included in the exported report.")
+                    except Exception as e:
+                        st.warning(f"Could not create bar chart for column '{example_col}': {str(e)}")
                 
                 if categorical_options.get("pie_charts", False) and selected_cat_cols:
                     st.markdown("#### Pie Charts")
                     # Show one example pie chart
                     example_col = selected_cat_cols[0]
                     
-                    # Get top categories
-                    value_counts = st.session_state.df[example_col].value_counts().nlargest(max_categories)
-                    
-                    # Create pie chart
-                    fig = px.pie(
-                        values=value_counts.values,
-                        names=value_counts.index,
-                        title=f"Distribution of {example_col} Categories"
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
-                    
-                    if len(selected_cat_cols) > 1:
-                        st.info(f"Pie charts for all {len(selected_cat_cols)} selected categorical columns will be included in the exported report.")
+                    try:
+                        # Get top categories
+                        value_counts = st.session_state.df[example_col].value_counts().nlargest(max_categories)
+                        
+                        # Create pie chart
+                        fig = px.pie(
+                            values=value_counts.values,
+                            names=value_counts.index,
+                            title=f"Distribution of {example_col} Categories"
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                        
+                        if len(selected_cat_cols) > 1:
+                            st.info(f"Pie charts for all {len(selected_cat_cols)} selected categorical columns will be included in the exported report.")
+                    except Exception as e:
+                        st.warning(f"Could not create pie chart for column '{example_col}': {str(e)}")
             
             # Correlation heatmap
             if "correlation" in selected_sections and correlation_options.get("heatmap", False):
@@ -847,19 +888,22 @@ def render_custom_report():
                 if len(selected_corr_cols) >= 2:
                     st.markdown("#### Correlation Heatmap")
                     
-                    # Calculate correlation matrix
-                    corr_method = correlation_options.get("method", "Pearson")
-                    corr_matrix = st.session_state.df[selected_corr_cols].corr(method=corr_method.lower()).round(3)
-                    
-                    # Create heatmap
-                    fig = px.imshow(
-                        corr_matrix,
-                        text_auto='.2f',
-                        color_continuous_scale='RdBu_r',
-                        title=f"{corr_method} Correlation Heatmap",
-                        labels=dict(color="Correlation")
-                    )
-                    st.plotly_chart(fig, use_container_width=True)
+                    try:
+                        # Calculate correlation matrix
+                        corr_method = correlation_options.get("method", "Pearson")
+                        corr_matrix = st.session_state.df[selected_corr_cols].corr(method=corr_method.lower()).round(3)
+                        
+                        # Create heatmap
+                        fig = px.imshow(
+                            corr_matrix,
+                            text_auto='.2f',
+                            color_continuous_scale='RdBu_r',
+                            title=f"{corr_method} Correlation Heatmap",
+                            labels=dict(color="Correlation")
+                        )
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.warning(f"Could not create correlation heatmap: {str(e)}")
             
             # Missing data visualizations
             if "missing" in selected_sections:
@@ -880,16 +924,19 @@ def render_custom_report():
                     if missing_options.get("bar_chart", False):
                         st.markdown("#### Missing Values Bar Chart")
                         
-                        # Create bar chart
-                        fig = px.bar(
-                            cols_with_missing,
-                            x='Column',
-                            y='Missing %',
-                            title='Missing Values by Column (%)',
-                            color='Missing %',
-                            color_continuous_scale="Reds"
-                        )
-                        st.plotly_chart(fig, use_container_width=True)
+                        try:
+                            # Create bar chart
+                            fig = px.bar(
+                                cols_with_missing,
+                                x='Column',
+                                y='Missing %',
+                                title='Missing Values by Column (%)',
+                                color='Missing %',
+                                color_continuous_scale="Reds"
+                            )
+                            st.plotly_chart(fig, use_container_width=True)
+                        except Exception as e:
+                            st.warning(f"Could not create missing values bar chart: {str(e)}")
                     
                     if missing_options.get("heatmap", False):
                         st.markdown("#### Missing Values Heatmap")
@@ -898,18 +945,21 @@ def render_custom_report():
                         cols_to_plot = cols_with_missing['Column'].tolist()
                         
                         if cols_to_plot:
-                            # Create sample for heatmap (limit to 100 rows for performance)
-                            sample_size = min(100, len(st.session_state.df))
-                            sample_df = st.session_state.df[cols_to_plot].sample(sample_size) if len(st.session_state.df) > sample_size else st.session_state.df[cols_to_plot]
-                            
-                            # Create heatmap
-                            fig = px.imshow(
-                                sample_df.isna(),
-                                labels=dict(x="Column", y="Row", color="Missing"),
-                                color_continuous_scale=["blue", "red"],
-                                title=f"Missing Values Heatmap (Sample of {sample_size} rows)"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
+                            try:
+                                # Create sample for heatmap (limit to 100 rows for performance)
+                                sample_size = min(100, len(st.session_state.df))
+                                sample_df = st.session_state.df[cols_to_plot].sample(sample_size) if len(st.session_state.df) > sample_size else st.session_state.df[cols_to_plot]
+                                
+                                # Create heatmap
+                                fig = px.imshow(
+                                    sample_df.isna(),
+                                    labels=dict(x="Column", y="Row", color="Missing"),
+                                    color_continuous_scale=["blue", "red"],
+                                    title=f"Missing Values Heatmap (Sample of {sample_size} rows)"
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
+                            except Exception as e:
+                                st.warning(f"Could not create missing values heatmap: {str(e)}")
         
         # Export options
         st.subheader("Export Report")
@@ -923,7 +973,8 @@ def render_custom_report():
                 data=report,
                 file_name=f"{report_title.replace(' ', '_').lower()}.md",
                 mime="text/markdown",
-                use_container_width=True
+                use_container_width=True,
+                key="custom_download_md"
             )
         
         with col2:
@@ -937,577 +988,44 @@ def render_custom_report():
                     data=html,
                     file_name=f"{report_title.replace(' ', '_').lower()}.html",
                     mime="text/html",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="custom_download_html"
                 )
             except:
                 st.warning("HTML export requires the markdown package. Try downloading as Markdown instead.")
 
-def render_export_options():
-    """Render export options tab"""
-    st.subheader("Export Options")
-    
-    # Create columns for better layout
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown("### Export Data")
-        
-        # Create exporter instance
-        exporter = DataExporter(st.session_state.df)
-        
-        # Render export options
-        exporter.render_export_options()
-    
-    with col2:
-        st.markdown("### Export Charts")
-        
-        # Select chart type to export
-        chart_type = st.selectbox(
-            "Select chart type:",
-            ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot", "Heatmap"]
-        )
-        
-        # Get numeric and categorical columns
-        num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
-        cat_cols = st.session_state.df.select_dtypes(include=['object', 'category']).columns.tolist()
-        
-        # Configure chart based on type
-        if chart_type == "Bar Chart":
-            # Column selections
-            x_col = st.selectbox("X-axis (categories):", cat_cols if cat_cols else st.session_state.df.columns.tolist())
-            y_col = st.selectbox("Y-axis (values):", num_cols if num_cols else st.session_state.df.columns.tolist())
-            
-            # Create chart
-            fig = px.bar(
-                st.session_state.df,
-                x=x_col,
-                y=y_col,
-                title=f"Bar Chart: {x_col} vs {y_col}"
-            )
-        
-        elif chart_type == "Line Chart":
-            # Column selections
-            x_col = st.selectbox("X-axis:", st.session_state.df.columns.tolist())
-            y_col = st.selectbox("Y-axis:", num_cols if num_cols else st.session_state.df.columns.tolist())
-            
-            # Create chart
-            fig = px.line(
-                st.session_state.df,
-                x=x_col,
-                y=y_col,
-                title=f"Line Chart: {x_col} vs {y_col}"
-            )
-        
-        elif chart_type == "Scatter Plot":
-            # Column selections
-            x_col = st.selectbox("X-axis:", num_cols if num_cols else st.session_state.df.columns.tolist())
-            y_col = st.selectbox("Y-axis:", [col for col in num_cols if col != x_col] if len(num_cols) > 1 else num_cols)
-            
-            # Create chart
-            fig = px.scatter(
-                st.session_state.df,
-                x=x_col,
-                y=y_col,
-                title=f"Scatter Plot: {x_col} vs {y_col}"
-            )
-        
-        elif chart_type == "Pie Chart":
-            # Column selections
-            value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist())
-            name_col = st.selectbox("Name column:", cat_cols if cat_cols else st.session_state.df.columns.tolist())
-            
-            # Limit categories for better visualization
-            top_n = st.slider("Top N categories:", 3, 20, 10)
-            
-            # Calculate values for pie chart
-            value_counts = st.session_state.df.groupby(name_col)[value_col].sum().nlargest(top_n)
-            
-            # Create chart
-            fig = px.pie(
-                values=value_counts.values,
-                names=value_counts.index,
-                title=f"Pie Chart: {value_col} by {name_col}"
-            )
-        
-        elif chart_type == "Histogram":
-            # Column selection
-            value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist())
-            
-            # Number of bins
-            bins = st.slider("Number of bins:", 5, 100, 20)
-            
-            # Create chart
-            fig = px.histogram(
-                st.session_state.df,
-                x=value_col,
-                nbins=bins,
-                title=f"Histogram of {value_col}"
-            )
-        
-        elif chart_type == "Box Plot":
-            # Column selection
-            value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist())
-            
-            # Optional grouping
-            use_groups = st.checkbox("Group by category")
-            if use_groups and cat_cols:
-                group_col = st.selectbox("Group by:", cat_cols)
-                
-                # Create chart with grouping
-                fig = px.box(
-                    st.session_state.df,
-                    x=group_col,
-                    y=value_col,
-                    title=f"Box Plot of {value_col} by {group_col}"
-                )
-            else:
-                # Create chart without grouping
-                fig = px.box(
-                    st.session_state.df,
-                    y=value_col,
-                    title=f"Box Plot of {value_col}"
-                )
-        
-        elif chart_type == "Heatmap":
-            if len(num_cols) < 1:
-                st.warning("Need numeric columns for heatmap.")
-                return
-            
-            # Create correlation matrix for heatmap
-            corr_cols = st.multiselect(
-                "Select columns for correlation heatmap:",
-                num_cols,
-                default=num_cols[:min(8, len(num_cols))]
-            )
-            
-            if len(corr_cols) < 2:
-                st.warning("Please select at least two columns for correlation heatmap.")
-            else:
-                # Create chart
-                corr_matrix = st.session_state.df[corr_cols].corr().round(2)
-                
-                fig = px.imshow(
-                    corr_matrix,
-                    text_auto=True,
-                    color_continuous_scale="RdBu_r",
-                    title="Correlation Heatmap"
-                )
-        
-        # Display chart
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Export options
-        st.markdown("### Export Chart")
-        
-        # Format selection
-        export_format = st.radio(
-            "Export format:",
-            ["PNG", "JPEG", "SVG", "HTML"],
-            horizontal=True
-        )
-        
-        # Export button
-        if st.button("Export Chart", use_container_width=True):
-            if export_format == "HTML":
-                # Export as HTML file
-                buffer = StringIO()
-                fig.write_html(buffer)
-                html_bytes = buffer.getvalue().encode()
-                
-                st.download_button(
-                    label="Download HTML",
-                    data=html_bytes,
-                    file_name=f"chart_{chart_type.lower().replace(' ', '_')}.html",
-                    mime="text/html",
-                )
-            else:
-                # Export as image
-                img_bytes = fig.to_image(format=export_format.lower())
-                
-                st.download_button(
-                    label=f"Download {export_format}",
-                    data=img_bytes,
-                    file_name=f"chart_{chart_type.lower().replace(' ', '_')}.{export_format.lower()}",
-                    mime=f"image/{export_format.lower()}",
-                )
-
-def render_dashboard():
-    """Render dashboard section"""
-    st.header("Interactive Dashboard")
-    
-    # Dashboard generator
-    dashboard_generator = DashboardGenerator(st.session_state.df)
-    
-    # Create or load dashboard
-    with st.expander("Dashboard Settings", expanded=True):
-        # Dashboard title
-        dashboard_title = st.text_input("Dashboard Title:", "Data Insights Dashboard")
-        
-        # Dashboard layout
-        layout_type = st.radio(
-            "Layout Type:",
-            ["2 columns", "3 columns", "Custom"],
-            horizontal=True
-        )
-        
-        # Components selection
-        st.subheader("Add Dashboard Components")
-        
-        # Create tabs for component types
-        component_tabs = st.tabs(["Charts", "Metrics", "Tables", "Filters"])
-        
-        with component_tabs[0]:
-            # Charts section
-            st.markdown("### Chart Components")
-            
-            # Get numeric and categorical columns
-            num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
-            cat_cols = st.session_state.df.select_dtypes(include=['object', 'category']).columns.tolist()
-            
-            # Number of charts to add
-            n_charts = st.number_input("Number of charts to add:", 1, 8, 3)
-            
-            # List to store chart configurations
-            chart_configs = []
-            
-            for i in range(n_charts):
-                with st.container():
-                    st.markdown(f"#### Chart {i+1}")
-                    
-                    # Chart type selection
-                    chart_type = st.selectbox(
-                        "Chart type:",
-                        ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot"],
-                        key=f"chart_type_{i}"
-                    )
-                    
-                    # Chart title
-                    chart_title = st.text_input("Chart title:", value=f"Chart {i+1}", key=f"chart_title_{i}")
-                    
-                    # Configure chart based on type
-                    if chart_type == "Bar Chart":
-                        # Column selections
-                        x_col = st.selectbox("X-axis (categories):", cat_cols if cat_cols else st.session_state.df.columns.tolist(), key=f"x_col_{i}")
-                        y_col = st.selectbox("Y-axis (values):", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"y_col_{i}")
-                        
-                        # Add to configurations
-                        chart_configs.append({
-                            "type": "bar",
-                            "title": chart_title,
-                            "x": x_col,
-                            "y": y_col
-                        })
-                    
-                    elif chart_type == "Line Chart":
-                        # Column selections
-                        x_col = st.selectbox("X-axis:", st.session_state.df.columns.tolist(), key=f"x_col_{i}")
-                        y_col = st.selectbox("Y-axis:", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"y_col_{i}")
-                        
-                        # Add to configurations
-                        chart_configs.append({
-                            "type": "line",
-                            "title": chart_title,
-                            "x": x_col,
-                            "y": y_col
-                        })
-                    
-                    elif chart_type == "Scatter Plot":
-                        # Column selections
-                        x_col = st.selectbox("X-axis:", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"x_col_{i}")
-                        y_col = st.selectbox("Y-axis:", [col for col in num_cols if col != x_col] if len(num_cols) > 1 else num_cols, key=f"y_col_{i}")
-                        
-                        # Add to configurations
-                        chart_configs.append({
-                            "type": "scatter",
-                            "title": chart_title,
-                            "x": x_col,
-                            "y": y_col
-                        })
-                    
-                    elif chart_type == "Pie Chart":
-                        # Column selections
-                        value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"value_col_{i}")
-                        name_col = st.selectbox("Name column:", cat_cols if cat_cols else st.session_state.df.columns.tolist(), key=f"name_col_{i}")
-                        
-                        # Add to configurations
-                        chart_configs.append({
-                            "type": "pie",
-                            "title": chart_title,
-                            "value": value_col,
-                            "name": name_col
-                        })
-                    
-                    elif chart_type == "Histogram":
-                        # Column selection
-                        value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"value_col_{i}")
-                        
-                        # Add to configurations
-                        chart_configs.append({
-                            "type": "histogram",
-                            "title": chart_title,
-                            "value": value_col
-                        })
-                    
-                    elif chart_type == "Box Plot":
-                        # Column selection
-                        value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key=f"value_col_{i}")
-                        
-                        # Optional grouping
-                        use_groups = st.checkbox("Group by category", key=f"use_groups_{i}")
-                        if use_groups and cat_cols:
-                            group_col = st.selectbox("Group by:", cat_cols, key=f"group_col_{i}")
-                            
-                            # Add to configurations with grouping
-                            chart_configs.append({
-                                "type": "box",
-                                "title": chart_title,
-                                "value": value_col,
-                                "group": group_col
-                            })
-                        else:
-                            # Add to configurations without grouping
-                            chart_configs.append({
-                                "type": "box",
-                                "title": chart_title,
-                                "value": value_col
-                            })
-                    
-                    st.markdown("---")
-        
-        with component_tabs[1]:
-            # Metrics section
-            st.markdown("### Metric Components")
-            
-            # Get numeric columns
-            num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
-            
-            if not num_cols:
-                st.info("No numeric columns found for metrics.")
-            else:
-                # Number of metrics to add
-                n_metrics = st.number_input("Number of metrics to add:", 1, 8, 4)
-                
-                # List to store metric configurations
-                metric_configs = []
-                
-                for i in range(n_metrics):
-                    with st.container():
-                        st.markdown(f"#### Metric {i+1}")
-                        
-                        # Metric label
-                        metric_label = st.text_input("Metric label:", value=f"Metric {i+1}", key=f"metric_label_{i}")
-                        
-                        # Metric column
-                        metric_col = st.selectbox("Column:", num_cols, key=f"metric_col_{i}")
-                        
-                        # Aggregation function
-                        agg_func = st.selectbox(
-                            "Aggregation:",
-                            ["Mean", "Median", "Sum", "Min", "Max", "Count"],
-                            key=f"agg_func_{i}"
-                        )
-                        
-                        # Formatting
-                        format_type = st.selectbox(
-                            "Format as:",
-                            ["Number", "Percentage", "Currency"],
-                            key=f"format_type_{i}"
-                        )
-                        
-                        # Decimal places
-                        decimal_places = st.slider("Decimal places:", 0, 4, 2, key=f"decimal_places_{i}")
-                        
-                        # Add to configurations
-                        metric_configs.append({
-                            "label": metric_label,
-                            "column": metric_col,
-                            "aggregation": agg_func.lower(),
-                            "format": format_type.lower(),
-                            "decimals": decimal_places
-                        })
-                        
-                        st.markdown("---")
-        
-        with component_tabs[2]:
-            # Tables section
-            st.markdown("### Table Components")
-            
-            # Number of tables to add
-            n_tables = st.number_input("Number of tables to add:", 0, 4, 1)
-            
-            # List to store table configurations
-            table_configs = []
-            
-            for i in range(n_tables):
-                with st.container():
-                    st.markdown(f"#### Table {i+1}")
-                    
-                    # Table title
-                    table_title = st.text_input("Table title:", value=f"Table {i+1}", key=f"table_title_{i}")
-                    
-                    # Columns to include
-                    include_cols = st.multiselect(
-                        "Columns to include:",
-                        st.session_state.df.columns.tolist(),
-                        default=st.session_state.df.columns[:min(5, len(st.session_state.df.columns))].tolist(),
-                        key=f"include_cols_{i}"
-                    )
-                    
-                    # Max rows
-                    max_rows = st.slider("Maximum rows:", 5, 100, 10, key=f"max_rows_{i}")
-                    
-                    # Include index
-                    include_index = st.checkbox("Include row index", value=False, key=f"include_index_{i}")
-                    
-                    # Add to configurations
-                    table_configs.append({
-                        "title": table_title,
-                        "columns": include_cols,
-                        "max_rows": max_rows,
-                        "include_index": include_index
-                    })
-                    
-                    st.markdown("---")
-        
-        with component_tabs[3]:
-            # Filters section
-            st.markdown("### Filter Components")
-            
-            # Number of filters to add
-            n_filters = st.number_input("Number of filters to add:", 0, 8, 2)
-            
-            # List to store filter configurations
-            filter_configs = []
-            
-            for i in range(n_filters):
-                with st.container():
-                    st.markdown(f"#### Filter {i+1}")
-                    
-                    # Filter label
-                    filter_label = st.text_input("Filter label:", value=f"Filter {i+1}", key=f"filter_label_{i}")
-                    
-                    # Filter column
-                    filter_col = st.selectbox("Column to filter:", st.session_state.df.columns.tolist(), key=f"filter_col_{i}")
-                    
-                    # Filter type (based on column data type)
-                    if st.session_state.df[filter_col].dtype.kind in 'bifc':  # Numeric
-                        filter_type = "range"
-                    elif st.session_state.df[filter_col].dtype.kind == 'O' and st.session_state.df[filter_col].nunique() <= 20:  # Categorical with few values
-                        filter_type = "multiselect"
-                    else:  # Categorical with many values or other types
-                        filter_type = "text"
-                    
-                    # Add to configurations
-                    filter_configs.append({
-                        "label": filter_label,
-                        "column": filter_col,
-                        "type": filter_type
-                    })
-                    
-                    st.markdown("---")
-    
-    # Generate the dashboard
-    st.subheader(dashboard_title)
-    
-    # Create a filtered dataframe based on any active filters
-    if 'filter_configs' in locals() and filter_configs:
-        filtered_df = dashboard_generator.apply_filters(filter_configs)
-    else:
-        filtered_df = st.session_state.df.copy()
-    
-    # Display filters
-    if 'filter_configs' in locals() and filter_configs:
-        st.markdown("### Filters")
-        
-        # Create columns for filters
-        filter_cols = st.columns(min(3, len(filter_configs)))
-        
-        # Display each filter
-        for i, filter_config in enumerate(filter_configs):
-            col_idx = i % len(filter_cols)
-            with filter_cols[col_idx]:
-                dashboard_generator.render_filter(filter_config, key_suffix=f"dash_{i}")
-        
-        # Apply filters button
-        if st.button("Apply Filters", use_container_width=True):
-            filtered_df = dashboard_generator.apply_filters(filter_configs)
-    
-    # Display metrics
-    if 'metric_configs' in locals() and metric_configs:
-        st.markdown("### Key Metrics")
-        
-        # Create columns for metrics
-        metric_cols = st.columns(min(4, len(metric_configs)))
-        
-        # Display each metric
-        for i, metric_config in enumerate(metric_configs):
-            col_idx = i % len(metric_cols)
-            with metric_cols[col_idx]:
-                dashboard_generator.render_metric(filtered_df, metric_config)
-    
-    # Display charts
-    if 'chart_configs' in locals() and chart_configs:
-        st.markdown("### Charts")
-        
-        # Determine layout
-        if layout_type == "2 columns":
-            n_cols = 2
-        elif layout_type == "3 columns":
-            n_cols = 3
-        else:  # Custom
-            n_cols = st.slider("Number of columns for charts:", 1, 4, 2)
-        
-        # Create columns for charts
-        chart_cols = []
-        for i in range(0, len(chart_configs), n_cols):
-            # For each row, create n_cols columns (unless we're at the end)
-            row_cols = st.columns(min(n_cols, len(chart_configs) - i))
-            chart_cols.extend(row_cols)
-        
-        # Display each chart
-        for i, chart_config in enumerate(chart_configs):
-            with chart_cols[i]:
-                dashboard_generator.render_chart(filtered_df, chart_config)
-    
-    # Display tables
-    if 'table_configs' in locals() and table_configs:
-        st.markdown("### Data Tables")
-        
-        # Display each table
-        for table_config in table_configs:
-            st.subheader(table_config["title"])
-            dashboard_generator.render_table(filtered_df, table_config)
-
-# Main execution
-if __name__ == "__main__":
-    main()
-
 def render_exploratory_report():
     """Render exploratory analysis report tab"""
     st.subheader("Exploratory Data Analysis Report")
+    
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
     
     # Report configuration
     st.write("Generate an exploratory data analysis (EDA) report with visualizations and insights.")
     
     with st.expander("Report Configuration", expanded=True):
         # Report title and description
-        report_title = st.text_input("Report Title:", "Exploratory Data Analysis Report")
-        report_description = st.text_area("Report Description:", "This report provides an exploratory analysis of the dataset.")
+        report_title = st.text_input("Report Title:", "Exploratory Data Analysis Report", key="eda_report_title")
+        report_description = st.text_area("Report Description:", "This report provides an exploratory analysis of the dataset.", key="eda_report_description")
         
         # Analysis depth
         analysis_depth = st.select_slider(
             "Analysis Depth",
             options=["Basic", "Standard", "Comprehensive"],
-            value="Standard"
+            value="Standard",
+            key="eda_analysis_depth"
         )
         
         # Visualization settings
         st.write("Visualization Settings:")
-        max_categorical_values = st.slider("Max categorical values to display:", 5, 30, 10)
-        correlation_threshold = st.slider("Correlation threshold:", 0.0, 1.0, 0.5)
+        max_categorical_values = st.slider("Max categorical values to display:", 5, 30, 10, key="eda_max_categorical_values")
+        correlation_threshold = st.slider("Correlation threshold:", 0.0, 1.0, 0.5, key="eda_correlation_threshold")
     
     # Generate report
-    if st.button("Generate EDA Report", use_container_width=True):
+    if st.button("Generate EDA Report", use_container_width=True, key="eda_generate_button"):
         # Create progress bar
         progress_bar = st.progress(0)
         
@@ -1564,11 +1082,15 @@ def render_exploratory_report():
             analyzed_cols = all_cols
         
         # Initialize charts counter for progress tracking
-        total_charts = len(analyzed_cols)
+        total_charts = len(analyzed_cols) if len(analyzed_cols) > 0 else 1
         charts_done = 0
         
         # Analysis for each column
         for col in analyzed_cols:
+            # Make sure column exists in dataframe
+            if col not in st.session_state.df.columns:
+                continue
+                
             # Determine column type
             if col in num_cols:
                 col_type = "Numeric"
@@ -1591,32 +1113,35 @@ def render_exploratory_report():
             
             if col_type == "Numeric":
                 # Numeric column analysis
-                numeric_stats = st.session_state.df[col].describe().to_dict()
-                
-                report += f"* **Mean:** {numeric_stats['mean']:.3f}\n"
-                report += f"* **Median:** {st.session_state.df[col].median():.3f}\n"
-                report += f"* **Std Dev:** {numeric_stats['std']:.3f}\n"
-                report += f"* **Min:** {numeric_stats['min']:.3f}\n"
-                report += f"* **Max:** {numeric_stats['max']:.3f}\n"
-                
-                # Additional statistics for comprehensive analysis
-                if analysis_depth == "Comprehensive":
-                    try:
-                        skewness = st.session_state.df[col].skew()
-                        kurtosis = st.session_state.df[col].kurtosis()
-                        
-                        report += f"* **Skewness:** {skewness:.3f}\n"
-                        report += f"* **Kurtosis:** {kurtosis:.3f}\n"
-                        
-                        # Interpret skewness
-                        if abs(skewness) < 0.5:
-                            report += f"* **Distribution:** Approximately symmetric\n"
-                        elif skewness < 0:
-                            report += f"* **Distribution:** Negatively skewed (left-tailed)\n"
-                        else:
-                            report += f"* **Distribution:** Positively skewed (right-tailed)\n"
-                    except:
-                        pass
+                try:
+                    numeric_stats = st.session_state.df[col].describe().to_dict()
+                    
+                    report += f"* **Mean:** {numeric_stats['mean']:.3f}\n"
+                    report += f"* **Median:** {st.session_state.df[col].median():.3f}\n"
+                    report += f"* **Std Dev:** {numeric_stats['std']:.3f}\n"
+                    report += f"* **Min:** {numeric_stats['min']:.3f}\n"
+                    report += f"* **Max:** {numeric_stats['max']:.3f}\n"
+                    
+                    # Additional statistics for comprehensive analysis
+                    if analysis_depth == "Comprehensive":
+                        try:
+                            skewness = st.session_state.df[col].skew()
+                            kurtosis = st.session_state.df[col].kurtosis()
+                            
+                            report += f"* **Skewness:** {skewness:.3f}\n"
+                            report += f"* **Kurtosis:** {kurtosis:.3f}\n"
+                            
+                            # Interpret skewness
+                            if abs(skewness) < 0.5:
+                                report += f"* **Distribution:** Approximately symmetric\n"
+                            elif skewness < 0:
+                                report += f"* **Distribution:** Negatively skewed (left-tailed)\n"
+                            else:
+                                report += f"* **Distribution:** Positively skewed (right-tailed)\n"
+                        except Exception as e:
+                            report += f"* *Note: Could not calculate advanced statistics: {str(e)}*\n"
+                except Exception as e:
+                    report += f"* *Error calculating numeric statistics: {str(e)}*\n"
                 
                 report += f"\n**Histogram will be included in the final report.**\n\n"
                 
@@ -1626,20 +1151,24 @@ def render_exploratory_report():
                 report += f"* **Unique Values:** {unique_count}\n"
                 
                 # Show top categories
-                value_counts = st.session_state.df[col].value_counts().nlargest(max_categorical_values)
-                value_pcts = (value_counts / len(st.session_state.df) * 100).round(2)
+                try:
+                    value_counts = st.session_state.df[col].value_counts().nlargest(max_categorical_values)
+                    value_pcts = (value_counts / len(st.session_state.df) * 100).round(2)
+                    
+                    report += f"\n**Top {min(max_categorical_values, unique_count)} Values:**\n\n"
+                    
+                    # Create value counts dataframe
+                    vc_df = pd.DataFrame({
+                        'Value': value_counts.index,
+                        'Count': value_counts.values,
+                        'Percentage': value_pcts.values
+                    })
+                    
+                    # Convert to markdown table
+                    report += vc_df.to_markdown(index=False)
+                except Exception as e:
+                    report += f"*Error calculating category frequencies: {str(e)}*\n"
                 
-                report += f"\n**Top {min(max_categorical_values, unique_count)} Values:**\n\n"
-                
-                # Create value counts dataframe
-                vc_df = pd.DataFrame({
-                    'Value': value_counts.index,
-                    'Count': value_counts.values,
-                    'Percentage': value_pcts.values
-                })
-                
-                # Convert to markdown table
-                report += vc_df.to_markdown(index=False)
                 report += "\n\n**Bar chart will be included in the final report.**\n\n"
                 
             elif col_type == "DateTime":
@@ -1696,8 +1225,8 @@ def render_exploratory_report():
                                     weekday_name = weekday_names[common_weekday]
                                     
                                     report += f"* **Most Common Day of Week:** {weekday_name} ({common_weekday_count:,} occurrences, {common_weekday_pct}%)\n"
-                            except:
-                                pass
+                            except Exception as e:
+                                report += f"* *Error calculating day of week: {str(e)}*\n"
                                 
                     report += f"\n**Time series plot will be included in the final report.**\n\n"
                 except Exception as e:
@@ -1712,48 +1241,51 @@ def render_exploratory_report():
             report += "## 3. Correlation Analysis\n\n"
             
             # Calculate correlation matrix
-            corr_matrix = st.session_state.df[analyzed_num_cols].corr().round(3)
-            
-            # For basic analysis, limit to top correlations
-            if analysis_depth == "Basic":
-                report += "### Top Correlations\n\n"
+            try:
+                corr_matrix = st.session_state.df[analyzed_num_cols].corr().round(3)
                 
-                # Convert correlation matrix to a list of pairs
-                pairs = []
-                for i, col1 in enumerate(analyzed_num_cols):
-                    for j, col2 in enumerate(analyzed_num_cols):
-                        if i < j:  # Only include each pair once
-                            pairs.append({
-                                'Column 1': col1,
-                                'Column 2': col2,
-                                'Correlation': corr_matrix.loc[col1, col2]
-                            })
-                
-                # Convert to dataframe
-                pairs_df = pd.DataFrame(pairs)
-                
-                # Sort by absolute correlation
-                pairs_df['Abs Correlation'] = pairs_df['Correlation'].abs()
-                pairs_df = pairs_df.sort_values('Abs Correlation', ascending=False).drop('Abs Correlation', axis=1)
-                
-                # Display top correlations above threshold
-                strong_pairs = pairs_df[pairs_df['Correlation'].abs() >= correlation_threshold]
-                
-                if len(strong_pairs) > 0:
-                    report += f"**Strong correlations (|r| ≥ {correlation_threshold}):**\n\n"
-                    report += strong_pairs.to_markdown(index=False)
-                    report += "\n\n"
+                # For basic analysis, limit to top correlations
+                if analysis_depth == "Basic":
+                    report += "### Top Correlations\n\n"
+                    
+                    # Convert correlation matrix to a list of pairs
+                    pairs = []
+                    for i, col1 in enumerate(analyzed_num_cols):
+                        for j, col2 in enumerate(analyzed_num_cols):
+                            if i < j:  # Only include each pair once
+                                pairs.append({
+                                    'Column 1': col1,
+                                    'Column 2': col2,
+                                    'Correlation': corr_matrix.loc[col1, col2]
+                                })
+                    
+                    # Convert to dataframe
+                    pairs_df = pd.DataFrame(pairs)
+                    
+                    # Sort by absolute correlation
+                    pairs_df['Abs Correlation'] = pairs_df['Correlation'].abs()
+                    pairs_df = pairs_df.sort_values('Abs Correlation', ascending=False).drop('Abs Correlation', axis=1)
+                    
+                    # Display top correlations above threshold
+                    strong_pairs = pairs_df[pairs_df['Correlation'].abs() >= correlation_threshold]
+                    
+                    if len(strong_pairs) > 0:
+                        report += f"**Strong correlations (|r| ≥ {correlation_threshold}):**\n\n"
+                        report += strong_pairs.to_markdown(index=False)
+                        report += "\n\n"
+                    else:
+                        report += f"*No strong correlations found (using threshold |r| ≥ {correlation_threshold}).*\n\n"
                 else:
-                    report += f"*No strong correlations found (using threshold |r| ≥ {correlation_threshold}).*\n\n"
-            else:
-                # For standard and comprehensive analysis, include full correlation matrix
-                report += "### Correlation Matrix\n\n"
-                report += "*Correlation heatmap will be included in the final report.*\n\n"
-                
-                if analysis_depth == "Comprehensive":
-                    report += "### Full Correlation Matrix\n\n"
-                    report += corr_matrix.to_markdown()
-                    report += "\n\n"
+                    # For standard and comprehensive analysis, include full correlation matrix
+                    report += "### Correlation Matrix\n\n"
+                    report += "*Correlation heatmap will be included in the final report.*\n\n"
+                    
+                    if analysis_depth == "Comprehensive":
+                        report += "### Full Correlation Matrix\n\n"
+                        report += corr_matrix.to_markdown()
+                        report += "\n\n"
+            except Exception as e:
+                report += f"*Error calculating correlations: {str(e)}*\n\n"
         
         progress_bar.progress(60)
         
@@ -1782,17 +1314,20 @@ def render_exploratory_report():
             
             # For comprehensive analysis, include detailed pattern analysis
             if analysis_depth == "Comprehensive" and len(cols_with_missing) > 1:
-                report += "### Missing Value Patterns\n\n"
-                report += "*Missing values heatmap will be included in the final report.*\n\n"
-                
-                # Calculate correlations between missing values
-                # This indicates if missingness in one column correlates with missingness in another
-                missing_pattern = st.session_state.df[cols_with_missing['Column']].isna()
-                missing_corr = missing_pattern.corr().round(3)
-                
-                report += "**Missing Value Correlation Matrix** (correlation between missing patterns)\n\n"
-                report += missing_corr.to_markdown()
-                report += "\n\n*High correlation suggests missing values occur together in the same rows.*\n\n"
+                try:
+                    report += "### Missing Value Patterns\n\n"
+                    report += "*Missing values heatmap will be included in the final report.*\n\n"
+                    
+                    # Calculate correlations between missing values
+                    # This indicates if missingness in one column correlates with missingness in another
+                    missing_pattern = st.session_state.df[cols_with_missing['Column']].isna()
+                    missing_corr = missing_pattern.corr().round(3)
+                    
+                    report += "**Missing Value Correlation Matrix** (correlation between missing patterns)\n\n"
+                    report += missing_corr.to_markdown()
+                    report += "\n\n*High correlation suggests missing values occur together in the same rows.*\n\n"
+                except Exception as e:
+                    report += f"*Error analyzing missing value patterns: {str(e)}*\n\n"
         else:
             report += "*No missing values found in the dataset.*\n\n"
         
@@ -1805,69 +1340,88 @@ def render_exploratory_report():
             outlier_summary = []
             
             for col in analyzed_num_cols:
-                # Calculate IQR
-                Q1 = st.session_state.df[col].quantile(0.25)
-                Q3 = st.session_state.df[col].quantile(0.75)
-                IQR = Q3 - Q1
-                
-                # Define outlier bounds
-                lower_bound = Q1 - 1.5 * IQR
-                upper_bound = Q3 + 1.5 * IQR
-                
-                # Count outliers
-                outliers = st.session_state.df[(st.session_state.df[col] < lower_bound) | 
-                                     (st.session_state.df[col] > upper_bound)]
-                
-                outlier_count = len(outliers)
-                outlier_pct = (outlier_count / len(st.session_state.df) * 100).round(2)
-                
-                # Add to summary
-                outlier_summary.append({
-                    'Column': col,
-                    'Q1': Q1,
-                    'Q3': Q3,
-                    'IQR': IQR,
-                    'Lower Bound': lower_bound,
-                    'Upper Bound': upper_bound,
-                    'Outlier Count': outlier_count,
-                    'Outlier %': outlier_pct
-                })
+                try:
+                    # Calculate IQR
+                    Q1 = st.session_state.df[col].quantile(0.25)
+                    Q3 = st.session_state.df[col].quantile(0.75)
+                    IQR = Q3 - Q1
+                    
+                    # Define outlier bounds
+                    lower_bound = Q1 - 1.5 * IQR
+                    upper_bound = Q3 + 1.5 * IQR
+                    
+                    # Count outliers
+                    outliers = st.session_state.df[(st.session_state.df[col] < lower_bound) | 
+                                         (st.session_state.df[col] > upper_bound)]
+                    
+                    outlier_count = len(outliers)
+                    outlier_pct = (outlier_count / len(st.session_state.df) * 100).round(2)
+                    
+                    # Add to summary
+                    outlier_summary.append({
+                        'Column': col,
+                        'Q1': Q1,
+                        'Q3': Q3,
+                        'IQR': IQR,
+                        'Lower Bound': lower_bound,
+                        'Upper Bound': upper_bound,
+                        'Outlier Count': outlier_count,
+                        'Outlier %': outlier_pct
+                    })
+                except Exception as e:
+                    outlier_summary.append({
+                        'Column': col,
+                        'Q1': None,
+                        'Q3': None,
+                        'IQR': None,
+                        'Lower Bound': None,
+                        'Upper Bound': None,
+                        'Outlier Count': None,
+                        'Outlier %': None,
+                        'Error': str(e)
+                    })
             
             # Convert to dataframe
             outlier_df = pd.DataFrame(outlier_summary)
             
-            # Sort by outlier count (descending)
-            outlier_df = outlier_df.sort_values('Outlier Count', ascending=False)
+            # Filter out errors
+            valid_outlier_df = outlier_df[outlier_df['Q1'].notna()]
             
-            # For standard and comprehensive analysis, include detailed outlier information
-            if analysis_depth in ["Standard", "Comprehensive"]:
-                report += "### Outlier Summary\n\n"
+            if len(valid_outlier_df) > 0:
+                # Sort by outlier count (descending)
+                valid_outlier_df = valid_outlier_df.sort_values('Outlier Count', ascending=False)
                 
-                # Convert to markdown table
-                summary_cols = ['Column', 'Outlier Count', 'Outlier %', 'Lower Bound', 'Upper Bound']
-                report += outlier_df[summary_cols].to_markdown(index=False)
-                report += "\n\n"
-                
-                report += "*Box plots for columns with outliers will be included in the final report.*\n\n"
-                
-                # For comprehensive analysis, include detailed statistics
-                if analysis_depth == "Comprehensive":
-                    report += "### Detailed Outlier Statistics\n\n"
-                    report += outlier_df.to_markdown(index=False)
+                # For standard and comprehensive analysis, include detailed outlier information
+                if analysis_depth in ["Standard", "Comprehensive"]:
+                    report += "### Outlier Summary\n\n"
+                    
+                    # Convert to markdown table
+                    summary_cols = ['Column', 'Outlier Count', 'Outlier %', 'Lower Bound', 'Upper Bound']
+                    report += valid_outlier_df[summary_cols].to_markdown(index=False)
                     report += "\n\n"
-            else:
-                # For basic analysis, just include a summary
-                report += f"**Total columns with outliers:** {len(outlier_df[outlier_df['Outlier Count'] > 0])}\n\n"
-                
-                # Show top columns with outliers
-                top_outliers = outlier_df[outlier_df['Outlier Count'] > 0].head(5)
-                
-                if len(top_outliers) > 0:
-                    report += "**Top columns with outliers:**\n\n"
-                    report += top_outliers[['Column', 'Outlier Count', 'Outlier %']].to_markdown(index=False)
-                    report += "\n\n"
+                    
+                    report += "*Box plots for columns with outliers will be included in the final report.*\n\n"
+                    
+                    # For comprehensive analysis, include detailed statistics
+                    if analysis_depth == "Comprehensive":
+                        report += "### Detailed Outlier Statistics\n\n"
+                        report += valid_outlier_df[['Column', 'Q1', 'Q3', 'IQR', 'Lower Bound', 'Upper Bound', 'Outlier Count', 'Outlier %']].to_markdown(index=False)
+                        report += "\n\n"
                 else:
-                    report += "*No outliers found in the dataset using the IQR method.*\n\n"
+                    # For basic analysis, just include a summary
+                    report += f"**Total columns with outliers:** {len(valid_outlier_df[valid_outlier_df['Outlier Count'] > 0])}\n\n"
+                    
+                    # Show top columns with outliers
+                    top_outliers = valid_outlier_df[valid_outlier_df['Outlier Count'] > 0].head(5)
+                    
+                    if len(top_outliers) > 0:
+                        report += "**Top columns with outliers:**\n\n"
+                        report += top_outliers[['Column', 'Outlier Count', 'Outlier %']].to_markdown(index=False)
+                        report += "\n\n"
+                    else:
+                        report += "*No outliers found in the dataset using the IQR method.*\n\n"
+            else:
+                report += "*Error calculating outliers for numeric columns.*\n\n"
         
         progress_bar.progress(80)
         
@@ -1877,31 +1431,34 @@ def render_exploratory_report():
             
             # For each categorical column, analyze distribution
             for i, col in enumerate(analyzed_cat_cols[:5]):  # Limit to top 5 columns
-                unique_count = st.session_state.df[col].nunique()
-                
-                report += f"### 6.{i+1}. {col}\n\n"
-                report += f"* **Unique Values:** {unique_count}\n"
-                
-                # For columns with many unique values, show value counts
-                if unique_count <= 30 or analysis_depth == "Comprehensive":
-                    # Get value counts
-                    value_counts = st.session_state.df[col].value_counts().nlargest(max_categorical_values)
-                    value_pcts = (value_counts / len(st.session_state.df) * 100).round(2)
+                try:
+                    unique_count = st.session_state.df[col].nunique()
                     
-                    report += f"\n**Top {min(max_categorical_values, unique_count)} Values:**\n\n"
+                    report += f"### 6.{i+1}. {col}\n\n"
+                    report += f"* **Unique Values:** {unique_count}\n"
                     
-                    # Create value counts dataframe
-                    vc_df = pd.DataFrame({
-                        'Value': value_counts.index,
-                        'Count': value_counts.values,
-                        'Percentage': value_pcts.values
-                    })
+                    # For columns with many unique values, show value counts
+                    if unique_count <= 30 or analysis_depth == "Comprehensive":
+                        # Get value counts
+                        value_counts = st.session_state.df[col].value_counts().nlargest(max_categorical_values)
+                        value_pcts = (value_counts / len(st.session_state.df) * 100).round(2)
+                        
+                        report += f"\n**Top {min(max_categorical_values, unique_count)} Values:**\n\n"
+                        
+                        # Create value counts dataframe
+                        vc_df = pd.DataFrame({
+                            'Value': value_counts.index,
+                            'Count': value_counts.values,
+                            'Percentage': value_pcts.values
+                        })
+                        
+                        # Convert to markdown table
+                        report += vc_df.to_markdown(index=False)
+                        report += "\n\n"
                     
-                    # Convert to markdown table
-                    report += vc_df.to_markdown(index=False)
-                    report += "\n\n"
-                
-                report += "*Bar chart will be included in the final report.*\n\n"
+                    report += "*Bar chart will be included in the final report.*\n\n"
+                except Exception as e:
+                    report += f"*Error analyzing categorical column {col}: {str(e)}*\n\n"
             
             # If too many columns, note that only top ones were shown
             if len(analyzed_cat_cols) > 5:
@@ -1934,28 +1491,34 @@ def render_exploratory_report():
             report += f"* **Missing Data:** No missing values found in the dataset.\n"
         
         # Outliers (if analyzed)
-        if len(analyzed_num_cols) > 0:
-            outlier_cols = outlier_df[outlier_df['Outlier %'] > 5]
-            if len(outlier_cols) > 0:
-                report += f"* **Outliers:** {len(outlier_cols)} columns have more than 5% outliers.\n"
-                
-                # Top columns with outliers
-                top_outlier_cols = outlier_cols.head(3)
-                outlier_col_list = ", ".join([f"'{col}' ({pct}%)" for col, pct in zip(top_outlier_cols['Column'], top_outlier_cols['Outlier %'])])
-                report += f"  * Columns with most outliers: {outlier_col_list}\n"
+        if len(analyzed_num_cols) > 0 and 'valid_outlier_df' in locals():
+            try:
+                outlier_cols = valid_outlier_df[valid_outlier_df['Outlier %'] > 5]
+                if len(outlier_cols) > 0:
+                    report += f"* **Outliers:** {len(outlier_cols)} columns have more than 5% outliers.\n"
+                    
+                    # Top columns with outliers
+                    top_outlier_cols = outlier_cols.head(3)
+                    outlier_col_list = ", ".join([f"'{col}' ({pct}%)" for col, pct in zip(top_outlier_cols['Column'], top_outlier_cols['Outlier %'])])
+                    report += f"  * Columns with most outliers: {outlier_col_list}\n"
+            except Exception as e:
+                report += f"* **Outliers:** Error summarizing outliers: {str(e)}\n"
         
         # Correlations (if analyzed)
-        if len(analyzed_num_cols) >= 2:
-            strong_corrs = pairs_df[pairs_df['Correlation'].abs() >= 0.7]
-            if len(strong_corrs) > 0:
-                report += f"* **Strong Correlations:** {len(strong_corrs)} pairs of numeric columns have strong correlations (|r| ≥ 0.7).\n"
-                
-                # Top correlations
-                top_corr = strong_corrs.head(2)
-                if len(top_corr) > 0:
-                    corr_list = ", ".join([f"'{col1}' and '{col2}' (r={corr:.2f})" for col1, col2, corr in zip(
-                        top_corr['Column 1'], top_corr['Column 2'], top_corr['Correlation'])])
-                    report += f"  * Strongest correlations: {corr_list}\n"
+        if len(analyzed_num_cols) >= 2 and 'pairs_df' in locals():
+            try:
+                strong_corrs = pairs_df[pairs_df['Correlation'].abs() >= 0.7]
+                if len(strong_corrs) > 0:
+                    report += f"* **Strong Correlations:** {len(strong_corrs)} pairs of numeric columns have strong correlations (|r| ≥ 0.7).\n"
+                    
+                    # Top correlations
+                    top_corr = strong_corrs.head(2)
+                    if len(top_corr) > 0:
+                        corr_list = ", ".join([f"'{col1}' and '{col2}' (r={corr:.2f})" for col1, col2, corr in zip(
+                            top_corr['Column 1'], top_corr['Column 2'], top_corr['Correlation'])])
+                        report += f"  * Strongest correlations: {corr_list}\n"
+            except Exception as e:
+                report += f"* **Correlations:** Error summarizing correlations: {str(e)}\n"
         
         # Recommendations
         report += "\n### Recommendations\n\n"
@@ -1968,7 +1531,7 @@ def render_exploratory_report():
             report += "  * Investigate if missing data follows a pattern that could introduce bias.\n"
         
         # Outlier recommendations
-        if len(analyzed_num_cols) > 0 and len(outlier_df[outlier_df['Outlier Count'] > 0]) > 0:
+        if len(analyzed_num_cols) > 0 and 'valid_outlier_df' in locals() and len(valid_outlier_df[valid_outlier_df['Outlier Count'] > 0]) > 0:
             report += "* **Outlier Treatment:**\n"
             report += "  * Inspect outliers to determine if they are valid data points or errors.\n"
             report += "  * Consider appropriate treatment such as capping, transforming, or removing outliers depending on your analysis goals.\n"
@@ -1976,7 +1539,7 @@ def render_exploratory_report():
         # Correlation recommendations
         if len(analyzed_num_cols) >= 2:
             report += "* **Feature Selection/Engineering:**\n"
-            if len(strong_corrs) > 0:
+            if 'strong_corrs' in locals() and len(strong_corrs) > 0:
                 report += "  * Highly correlated features may contain redundant information. Consider removing some of them or creating composite features.\n"
             report += "  * Explore feature engineering opportunities to create more predictive variables.\n"
         
@@ -2007,57 +1570,69 @@ def render_exploratory_report():
         
         # Numeric column histograms
         for col in analyzed_num_cols[:3]:  # Limit to first 3 columns
-            fig = px.histogram(
-                st.session_state.df,
-                x=col,
-                title=f"Distribution of {col}",
-                marginal="box"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            charts.append(fig)
+            try:
+                fig = px.histogram(
+                    st.session_state.df,
+                    x=col,
+                    title=f"Distribution of {col}",
+                    marginal="box"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                charts.append(fig)
+            except Exception as e:
+                st.warning(f"Could not create histogram for column '{col}': {str(e)}")
         
         # Categorical column bar charts
         for col in analyzed_cat_cols[:3]:  # Limit to first 3 columns
-            # Limit to top categories
-            top_cats = st.session_state.df[col].value_counts().nlargest(max_categorical_values).index.tolist()
-            filtered_df = st.session_state.df[st.session_state.df[col].isin(top_cats)]
-            
-            fig = px.bar(
-                filtered_df[col].value_counts().reset_index(),
-                x="index",
-                y=col,
-                title=f"Frequency of {col} Categories (Top {len(top_cats)})",
-                labels={"index": col, col: "Count"}
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            charts.append(fig)
+            try:
+                # Limit to top categories
+                top_cats = st.session_state.df[col].value_counts().nlargest(max_categorical_values).index.tolist()
+                filtered_df = st.session_state.df[st.session_state.df[col].isin(top_cats)]
+                
+                fig = px.bar(
+                    filtered_df[col].value_counts().reset_index(),
+                    x="index",
+                    y=col,
+                    title=f"Frequency of {col} Categories (Top {len(top_cats)})",
+                    labels={"index": col, col: "Count"}
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                charts.append(fig)
+            except Exception as e:
+                st.warning(f"Could not create bar chart for column '{col}': {str(e)}")
         
         # Correlation heatmap
         if len(analyzed_num_cols) >= 2:
-            corr_matrix = st.session_state.df[analyzed_num_cols].corr().round(3)
-            
-            fig = px.imshow(
-                corr_matrix,
-                text_auto='.2f',
-                color_continuous_scale='RdBu_r',
-                title="Correlation Heatmap",
-                labels=dict(color="Correlation")
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            charts.append(fig)
+            try:
+                corr_matrix = st.session_state.df[analyzed_num_cols].corr().round(3)
+                
+                fig = px.imshow(
+                    corr_matrix,
+                    text_auto='.2f',
+                    color_continuous_scale='RdBu_r',
+                    title="Correlation Heatmap",
+                    labels=dict(color="Correlation")
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                charts.append(fig)
+            except Exception as e:
+                st.warning(f"Could not create correlation heatmap: {str(e)}")
         
         # Missing values bar chart
         if len(cols_with_missing) > 0:
-            fig = px.bar(
-                cols_with_missing,
-                x='Column',
-                y='Missing %',
-                title='Missing Values by Column (%)',
-                color='Missing %',
-                color_continuous_scale="Reds"
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            charts.append(fig)
+            try:
+                fig = px.bar(
+                    cols_with_missing,
+                    x='Column',
+                    y='Missing %',
+                    title='Missing Values by Column (%)',
+                    color='Missing %',
+                    color_continuous_scale="Reds"
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                charts.append(fig)
+            except Exception as e:
+                st.warning(f"Could not create missing values chart: {str(e)}")
         
         # Export options
         st.subheader("Export Report")
@@ -2071,7 +1646,8 @@ def render_exploratory_report():
                 data=report,
                 file_name=f"{report_title.replace(' ', '_').lower()}.md",
                 mime="text/markdown",
-                use_container_width=True
+                use_container_width=True,
+                key="eda_download_md"
             )
         
         with col2:
@@ -2085,14 +1661,273 @@ def render_exploratory_report():
                     data=html,
                     file_name=f"{report_title.replace(' ', '_').lower()}.html",
                     mime="text/html",
-                    use_container_width=True
+                    use_container_width=True,
+                    key="eda_download_html"
                 )
             except:
                 st.warning("HTML export requires the markdown package. Try downloading as Markdown instead.")
 
+def render_export_options():
+    """Render export options tab"""
+    st.subheader("Export Options")
+    
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
+    
+    # Create columns for better layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Export Data")
+        
+        # Create exporter instance
+        try:
+            exporter = DataExporter(st.session_state.df)
+            
+            # Render export options
+            exporter.render_export_options()
+        except Exception as e:
+            st.error(f"Error initializing data exporter: {str(e)}")
+            
+            # Provide fallback export options
+            st.write("Basic export options:")
+            
+            export_format = st.selectbox(
+                "Export format:",
+                ["CSV", "Excel", "JSON"],
+                key="basic_export_format"
+            )
+            
+            if st.button("Export Data", key="basic_export_button"):
+                try:
+                    if export_format == "CSV":
+                        csv_data = st.session_state.df.to_csv(index=False)
+                        st.download_button(
+                            "Download CSV",
+                            data=csv_data,
+                            file_name="exported_data.csv",
+                            mime="text/csv",
+                            key="download_csv"
+                        )
+                    elif export_format == "Excel":
+                        output = BytesIO()
+                        with pd.ExcelWriter(output, engine='xlsxwriter') as writer:
+                            st.session_state.df.to_excel(writer, index=False)
+                        excel_data = output.getvalue()
+                        st.download_button(
+                            "Download Excel",
+                            data=excel_data,
+                            file_name="exported_data.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            key="download_excel"
+                        )
+                    elif export_format == "JSON":
+                        json_data = st.session_state.df.to_json(orient="records")
+                        st.download_button(
+                            "Download JSON",
+                            data=json_data,
+                            file_name="exported_data.json",
+                            mime="application/json",
+                            key="download_json"
+                        )
+                except Exception as e:
+                    st.error(f"Error exporting data: {str(e)}")
+    
+    with col2:
+        st.markdown("### Export Charts")
+        
+        # Select chart type to export
+        chart_type = st.selectbox(
+            "Select chart type:",
+            ["Bar Chart", "Line Chart", "Scatter Plot", "Pie Chart", "Histogram", "Box Plot", "Heatmap"],
+            key="export_chart_type"
+        )
+        
+        # Get numeric and categorical columns
+        num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
+        cat_cols = st.session_state.df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        try:
+            # Configure chart based on type
+            if chart_type == "Bar Chart":
+                # Column selections
+                x_col = st.selectbox("X-axis (categories):", cat_cols if cat_cols else st.session_state.df.columns.tolist(), key="export_bar_x_col")
+                y_col = st.selectbox("Y-axis (values):", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_bar_y_col")
+                
+                # Create chart
+                fig = px.bar(
+                    st.session_state.df,
+                    x=x_col,
+                    y=y_col,
+                    title=f"Bar Chart: {x_col} vs {y_col}"
+                )
+            
+            elif chart_type == "Line Chart":
+                # Column selections
+                x_col = st.selectbox("X-axis:", st.session_state.df.columns.tolist(), key="export_line_x_col")
+                y_col = st.selectbox("Y-axis:", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_line_y_col")
+                
+                # Create chart
+                fig = px.line(
+                    st.session_state.df,
+                    x=x_col,
+                    y=y_col,
+                    title=f"Line Chart: {x_col} vs {y_col}"
+                )
+            
+            elif chart_type == "Scatter Plot":
+                # Column selections
+                x_col = st.selectbox("X-axis:", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_scatter_x_col")
+                y_col = st.selectbox("Y-axis:", [col for col in num_cols if col != x_col] if len(num_cols) > 1 else num_cols, key="export_scatter_y_col")
+                
+                # Create chart
+                fig = px.scatter(
+                    st.session_state.df,
+                    x=x_col,
+                    y=y_col,
+                    title=f"Scatter Plot: {x_col} vs {y_col}"
+                )
+            
+            elif chart_type == "Pie Chart":
+                # Column selections
+                value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_pie_value_col")
+                name_col = st.selectbox("Name column:", cat_cols if cat_cols else st.session_state.df.columns.tolist(), key="export_pie_name_col")
+                
+                # Limit categories for better visualization
+                top_n = st.slider("Top N categories:", 3, 20, 10, key="export_pie_top_n")
+                
+                # Calculate values for pie chart
+                value_counts = st.session_state.df.groupby(name_col)[value_col].sum().nlargest(top_n)
+                
+                # Create chart
+                fig = px.pie(
+                    values=value_counts.values,
+                    names=value_counts.index,
+                    title=f"Pie Chart: {value_col} by {name_col}"
+                )
+            
+            elif chart_type == "Histogram":
+                # Column selection
+                value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_hist_value_col")
+                
+                # Number of bins
+                bins = st.slider("Number of bins:", 5, 100, 20, key="export_hist_bins")
+                
+                # Create chart
+                fig = px.histogram(
+                    st.session_state.df,
+                    x=value_col,
+                    nbins=bins,
+                    title=f"Histogram of {value_col}"
+                )
+            
+            elif chart_type == "Box Plot":
+                # Column selection
+                value_col = st.selectbox("Value column:", num_cols if num_cols else st.session_state.df.columns.tolist(), key="export_box_value_col")
+                
+                # Optional grouping
+                use_groups = st.checkbox("Group by category", key="export_box_use_groups")
+                if use_groups and cat_cols:
+                    group_col = st.selectbox("Group by:", cat_cols, key="export_box_group_col")
+                    
+                    # Create chart with grouping
+                    fig = px.box(
+                        st.session_state.df,
+                        x=group_col,
+                        y=value_col,
+                        title=f"Box Plot of {value_col} by {group_col}"
+                    )
+                else:
+                    # Create chart without grouping
+                    fig = px.box(
+                        st.session_state.df,
+                        y=value_col,
+                        title=f"Box Plot of {value_col}"
+                    )
+            
+            elif chart_type == "Heatmap":
+                if len(num_cols) < 1:
+                    st.warning("Need numeric columns for heatmap.")
+                    return
+                
+                # Create correlation matrix for heatmap
+                corr_cols = st.multiselect(
+                    "Select columns for correlation heatmap:",
+                    num_cols,
+                    default=num_cols[:min(8, len(num_cols))],
+                    key="export_heatmap_cols"
+                )
+                
+                if len(corr_cols) < 2:
+                    st.warning("Please select at least two columns for correlation heatmap.")
+                else:
+                    # Create chart
+                    corr_matrix = st.session_state.df[corr_cols].corr().round(2)
+                    
+                    fig = px.imshow(
+                        corr_matrix,
+                        text_auto=True,
+                        color_continuous_scale="RdBu_r",
+                        title="Correlation Heatmap"
+                    )
+            
+            # Display chart
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Export options
+            st.markdown("### Export Chart")
+            
+            # Format selection
+            export_format = st.radio(
+                "Export format:",
+                ["PNG", "JPEG", "SVG", "HTML"],
+                horizontal=True,
+                key='export_format'
+            )
+            
+            # Export button
+            if st.button("Export Chart", use_container_width=True, key="export_chart_button"):
+                try:
+                    if export_format == "HTML":
+                        # Export as HTML file
+                        buffer = StringIO()
+                        fig.write_html(buffer)
+                        html_bytes = buffer.getvalue().encode()
+                        
+                        st.download_button(
+                            label="Download HTML",
+                            data=html_bytes,
+                            file_name=f"chart_{chart_type.lower().replace(' ', '_')}.html",
+                            mime="text/html",
+                            key="download_chart_html"
+                        )
+                    else:
+                        # Export as image
+                        img_bytes = fig.to_image(format=export_format.lower())
+                        
+                        st.download_button(
+                            label=f"Download {export_format}",
+                            data=img_bytes,
+                            file_name=f"chart_{chart_type.lower().replace(' ', '_')}.{export_format.lower()}",
+                            mime=f"image/{export_format.lower()}",
+                            key=f"download_chart_{export_format.lower()}"
+                        )
+                except Exception as e:
+                    st.error(f"Error exporting chart: {str(e)}")
+        except Exception as e:
+            st.error(f"Error creating chart: {str(e)}")
+            st.info("This may be due to incompatible column types or missing values. Try selecting different columns.")
+
 def render_trend_analysis():
     """Render trend analysis tab"""
     st.subheader("Trend Analysis")
+    
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
     
     # Check if we have date columns
     date_cols = st.session_state.df.select_dtypes(include=['datetime']).columns.tolist()
@@ -2116,17 +1951,29 @@ def render_trend_analysis():
     col1, col2 = st.columns(2)
     
     with col1:
-        x_col = st.selectbox("Date/Time column:", all_date_cols)
+        # Make sure we only suggest columns that actually exist in the dataframe
+        available_date_cols = [col for col in all_date_cols if col in st.session_state.df.columns]
+        if not available_date_cols:
+            st.error("No valid date/time columns found in the dataset.")
+            return
+            
+        x_col = st.selectbox("Date/Time column:", available_date_cols, key="trend_x_col")
     
     with col2:
-        # Get numeric columns
+        # Get numeric columns and ensure they exist in the dataframe
         num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
         
         if not num_cols:
             st.warning("No numeric columns found for trend analysis.")
             return
         
-        y_col = st.selectbox("Value column:", num_cols)
+        # Ensure each column in the list actually exists in the dataframe
+        available_num_cols = [col for col in num_cols if col in st.session_state.df.columns]
+        if not available_num_cols:
+            st.error("No valid numeric columns found in the dataset.")
+            return
+            
+        y_col = st.selectbox("Value column:", available_num_cols, key="trend_y_col")
     
     # Convert date column to datetime if it's not already
     if x_col in potential_date_cols:
@@ -2139,16 +1986,26 @@ def render_trend_analysis():
             st.info("Try selecting a different column or convert it to datetime in the Data Processing tab.")
             return
     
+    # Validate that selected columns exist before proceeding
+    if x_col not in st.session_state.df.columns:
+        st.error(f"Selected date column '{x_col}' not found in the dataset.")
+        return
+        
+    if y_col not in st.session_state.df.columns:
+        st.error(f"Selected value column '{y_col}' not found in the dataset.")
+        return
+    
     # Trend analysis type
     analysis_type = st.radio(
         "Analysis type:",
         ["Time Series Plot", "Moving Averages", "Seasonality Analysis", "Trend Decomposition"],
-        horizontal=True
+        horizontal=True,
+        key="trend_analysis_type"
     )
     
     if analysis_type == "Time Series Plot":
         # Optional grouping
-        use_grouping = st.checkbox("Group by a categorical column")
+        use_grouping = st.checkbox("Group by a categorical column", key="ts_use_grouping")
         group_col = None
         
         if use_grouping:
@@ -2159,36 +2016,57 @@ def render_trend_analysis():
                 st.warning("No categorical columns found for grouping.")
                 use_grouping = False
             else:
-                group_col = st.selectbox("Group by:", cat_cols)
+                # Ensure categorical columns exist in the dataframe
+                available_cat_cols = [col for col in cat_cols if col in st.session_state.df.columns]
+                if not available_cat_cols:
+                    st.warning("No valid categorical columns found for grouping.")
+                    use_grouping = False
+                else:
+                    group_col = st.selectbox("Group by:", available_cat_cols, key="ts_group_col")
         
         # Create time series plot
         if use_grouping and group_col:
+            # Validate group column exists
+            if group_col not in st.session_state.df.columns:
+                st.error(f"Selected grouping column '{group_col}' not found in the dataset.")
+                return
+                
             # Get top groups for better visualization
-            top_n = st.slider("Show top N groups:", 1, 10, 5)
+            top_n = st.slider("Show top N groups:", 1, 10, 5, key="ts_top_n")
             top_groups = st.session_state.df[group_col].value_counts().nlargest(top_n).index.tolist()
             
             # Filter to top groups
             filtered_df = st.session_state.df[st.session_state.df[group_col].isin(top_groups)]
             
-            # Create grouped time series
-            fig = px.line(
-                filtered_df,
-                x=x_col,
-                y=y_col,
-                color=group_col,
-                title=f"Time Series Plot of {y_col} over {x_col}, grouped by {group_col}"
-            )
+            # Create grouped time series - use try/except to catch any plotting errors
+            try:
+                fig = px.line(
+                    filtered_df,
+                    x=x_col,
+                    y=y_col,
+                    color=group_col,
+                    title=f"Time Series Plot of {y_col} over {x_col}, grouped by {group_col}"
+                )
+            except Exception as e:
+                st.error(f"Error creating plot: {str(e)}")
+                st.info("This may be due to incompatible data types or missing values. Try selecting different columns or preprocessing your data.")
+                return
         else:
-            # Simple time series
-            fig = px.line(
-                st.session_state.df,
-                x=x_col,
-                y=y_col,
-                title=f"Time Series Plot of {y_col} over {x_col}"
-            )
+            # Simple time series - use try/except to catch any plotting errors
+            try:
+                fig = px.line(
+                    st.session_state.df,
+                    x=x_col,
+                    y=y_col,
+                    title=f"Time Series Plot of {y_col} over {x_col}"
+                )
+            except Exception as e:
+                st.error(f"Error creating plot: {str(e)}")
+                st.info("This may be due to incompatible data types or missing values. Try selecting different columns or preprocessing your data.")
+                return
         
         # Add trend line
-        add_trend = st.checkbox("Add trend line")
+        add_trend = st.checkbox("Add trend line", key="ts_add_trend")
         if add_trend:
             try:
                 from scipy import stats as scipy_stats
@@ -2202,26 +2080,30 @@ def render_trend_analysis():
                 x_values = x_values[mask]
                 y_values = y_values[mask]
                 
-                # Perform linear regression
-                slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_values, y_values)
-                
-                # Create line
-                x_range = np.array([x_values.min(), x_values.max()])
-                y_range = intercept + slope * x_range
-                
-                # Convert back to datetime for plotting
-                x_dates = pd.to_datetime(x_range)
-                
-                # Add trend line
-                fig.add_trace(
-                    go.Scatter(
-                        x=x_dates,
-                        y=y_range,
-                        mode="lines",
-                        name=f"Trend (r²={r_value**2:.3f})",
-                        line=dict(color="red", dash="dash")
+                # Check if we have enough data points
+                if len(x_values) < 2 or len(y_values) < 2:
+                    st.warning("Not enough valid data points to calculate trend line.")
+                else:
+                    # Perform linear regression
+                    slope, intercept, r_value, p_value, std_err = scipy_stats.linregress(x_values, y_values)
+                    
+                    # Create line
+                    x_range = np.array([x_values.min(), x_values.max()])
+                    y_range = intercept + slope * x_range
+                    
+                    # Convert back to datetime for plotting
+                    x_dates = pd.to_datetime(x_range)
+                    
+                    # Add trend line
+                    fig.add_trace(
+                        go.Scatter(
+                            x=x_dates,
+                            y=y_range,
+                            mode="lines",
+                            name=f"Trend (r²={r_value**2:.3f})",
+                            line=dict(color="red", dash="dash")
+                        )
                     )
-                )
                 
             except Exception as e:
                 st.warning(f"Could not add trend line: {str(e)}")
@@ -2275,88 +2157,93 @@ def render_trend_analysis():
         window_sizes = st.multiselect(
             "Select moving average window sizes:",
             [7, 14, 30, 60, 90, 180, 365],
-            default=[30]
+            default=[30],
+            key="ma_window_sizes"
         )
         
         if not window_sizes:
             st.warning("Please select at least one window size.")
             return
         
-        # Create base time series plot
-        fig = go.Figure()
-        
-        # Add original data
-        fig.add_trace(
-            go.Scatter(
-                x=st.session_state.df[x_col],
-                y=st.session_state.df[y_col],
-                mode="lines",
-                name=f"Original {y_col}",
-                line=dict(color="blue")
-            )
-        )
-        
-        # Add moving averages
-        colors = ["red", "green", "purple", "orange", "brown", "pink", "grey"]
-        
-        for i, window in enumerate(window_sizes):
-            # Calculate moving average
-            ma = st.session_state.df[y_col].rolling(window=window).mean()
+        try:
+            # Create base time series plot
+            fig = go.Figure()
             
-            # Add to plot
+            # Add original data
             fig.add_trace(
                 go.Scatter(
                     x=st.session_state.df[x_col],
-                    y=ma,
+                    y=st.session_state.df[y_col],
                     mode="lines",
-                    name=f"{window}-period MA",
-                    line=dict(color=colors[i % len(colors)])
+                    name=f"Original {y_col}",
+                    line=dict(color="blue")
                 )
             )
-        
-        # Update layout
-        fig.update_layout(
-            title=f"Moving Averages of {y_col} over {x_col}",
-            xaxis_title=x_col,
-            yaxis_title=y_col
-        )
-        
-        # Show plot
-        st.plotly_chart(fig, use_container_width=True)
-        
-        # Additional analysis options
-        st.subheader("Additional Analysis")
-        
-        # Volatility analysis
-        show_volatility = st.checkbox("Show volatility (rolling standard deviation)")
-        if show_volatility:
-            # Create volatility plot
-            fig_vol = go.Figure()
             
-            # Calculate rolling standard deviation
-            vol_window = st.slider("Volatility window size:", 5, 100, 30)
-            volatility = st.session_state.df[y_col].rolling(window=vol_window).std()
+            # Add moving averages
+            colors = ["red", "green", "purple", "orange", "brown", "pink", "grey"]
             
-            # Add to plot
-            fig_vol.add_trace(
-                go.Scatter(
-                    x=st.session_state.df[x_col],
-                    y=volatility,
-                    mode="lines",
-                    name=f"{vol_window}-period Volatility",
-                    line=dict(color="red")
+            for i, window in enumerate(window_sizes):
+                # Calculate moving average
+                ma = st.session_state.df[y_col].rolling(window=window).mean()
+                
+                # Add to plot
+                fig.add_trace(
+                    go.Scatter(
+                        x=st.session_state.df[x_col],
+                        y=ma,
+                        mode="lines",
+                        name=f"{window}-period MA",
+                        line=dict(color=colors[i % len(colors)])
+                    )
                 )
-            )
             
             # Update layout
-            fig_vol.update_layout(
-                title=f"Volatility (Rolling Std Dev) of {y_col} over {x_col}",
+            fig.update_layout(
+                title=f"Moving Averages of {y_col} over {x_col}",
                 xaxis_title=x_col,
-                yaxis_title=f"Standard Deviation of {y_col}"
+                yaxis_title=y_col
             )
             
             # Show plot
-            st.plotly_chart(fig_vol, use_container_width=True)
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Additional analysis options
+            st.subheader("Additional Analysis")
+            
+            # Volatility analysis
+            show_volatility = st.checkbox("Show volatility (rolling standard deviation)", key="ma_show_volatility")
+            if show_volatility:
+                # Create volatility plot
+                fig_vol = go.Figure()
+                
+                # Calculate rolling standard deviation
+                vol_window = st.slider("Volatility window size:", 5, 100, 30, key="ma_vol_window")
+                volatility = st.session_state.df[y_col].rolling(window=vol_window).std()
+                
+                # Add to plot
+                fig_vol.add_trace(
+                    go.Scatter(
+                        x=st.session_state.df[x_col],
+                        y=volatility,
+                        mode="lines",
+                        name=f"{vol_window}-period Volatility",
+                        line=dict(color="red")
+                    )
+                )
+                
+                # Update layout
+                fig_vol.update_layout(
+                    title=f"Volatility (Rolling Std Dev) of {y_col} over {x_col}",
+                    xaxis_title=x_col,
+                    yaxis_title=f"Standard Deviation of {y_col}"
+                )
+                
+                # Show plot
+                st.plotly_chart(fig_vol, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating moving averages: {str(e)}")
+            st.info("This may be due to incompatible data types or missing values. Try selecting different columns or preprocessing your data.")
     
     elif analysis_type == "Seasonality Analysis":
         try:
@@ -2367,73 +2254,85 @@ def render_trend_analysis():
             
             # Check if the data is regularly spaced in time
             df_sorted = st.session_state.df.sort_values(x_col)
-            date_diffs = df_sorted[x_col].diff().dropna()
-            
-            if date_diffs.nunique() > 5:
-                st.warning("Data points are not regularly spaced in time. Seasonality analysis may not be accurate.")
             
             # Time period selection
             period_type = st.selectbox(
                 "Analyze seasonality by:",
-                ["Day of Week", "Month", "Quarter", "Year"]
+                ["Day of Week", "Month", "Quarter", "Year"],
+                key="season_period_type"
             )
             
             # Extract the relevant period component
-            if period_type == "Day of Week":
-                df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.day_name()
-                period_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
-            elif period_type == "Month":
-                df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
-                period_order = ["January", "February", "March", "April", "May", "June", 
-                               "July", "August", "September", "October", "November", "December"]
-            elif period_type == "Quarter":
-                df_sorted['period'] = "Q" + pd.to_datetime(df_sorted[x_col]).dt.quarter.astype(str)
-                period_order = ["Q1", "Q2", "Q3", "Q4"]
-            else:  # Year
-                df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.year
-                years = sorted(df_sorted['period'].unique())
-                period_order = years
+            try:
+                if period_type == "Day of Week":
+                    df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.day_name()
+                    period_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+                elif period_type == "Month":
+                    df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
+                    period_order = ["January", "February", "March", "April", "May", "June", 
+                                   "July", "August", "September", "October", "November", "December"]
+                elif period_type == "Quarter":
+                    df_sorted['period'] = "Q" + pd.to_datetime(df_sorted[x_col]).dt.quarter.astype(str)
+                    period_order = ["Q1", "Q2", "Q3", "Q4"]
+                else:  # Year
+                    df_sorted['period'] = pd.to_datetime(df_sorted[x_col]).dt.year
+                    years = sorted(df_sorted['period'].unique())
+                    period_order = years
+            except Exception as e:
+                st.error(f"Error extracting {period_type} from the date column: {str(e)}")
+                st.info("Make sure the date column is in a proper datetime format.")
+                return
             
             # Calculate statistics by period
-            period_stats = df_sorted.groupby('period')[y_col].agg(['mean', 'median', 'min', 'max', 'std', 'count'])
+            try:
+                period_stats = df_sorted.groupby('period')[y_col].agg(['mean', 'median', 'min', 'max', 'std', 'count'])
+            except Exception as e:
+                st.error(f"Error calculating statistics by period: {str(e)}")
+                return
             
             # Reorder based on natural order
-            if period_type != "Year":
-                # For named periods, use predefined order
-                period_stats = period_stats.reindex(period_order)
-            else:
-                # For years, sort numerically
-                period_stats = period_stats.sort_index()
-            
-            # Fill NaN with 0
-            period_stats = period_stats.fillna(0)
+            try:
+                if period_type != "Year":
+                    # For named periods, use predefined order
+                    period_stats = period_stats.reindex(period_order)
+                else:
+                    # For years, sort numerically
+                    period_stats = period_stats.sort_index()
+                
+                # Fill NaN with 0
+                period_stats = period_stats.fillna(0)
+            except Exception as e:
+                st.warning(f"Error reordering periods: {str(e)}")
             
             # Create bar chart
-            fig = go.Figure()
-            
-            # Add mean bars
-            fig.add_trace(
-                go.Bar(
-                    x=period_stats.index,
-                    y=period_stats['mean'],
-                    name="Mean",
-                    error_y=dict(
-                        type='data',
-                        array=period_stats['std'],
-                        visible=True
+            try:
+                fig = go.Figure()
+                
+                # Add mean bars
+                fig.add_trace(
+                    go.Bar(
+                        x=period_stats.index,
+                        y=period_stats['mean'],
+                        name="Mean",
+                        error_y=dict(
+                            type='data',
+                            array=period_stats['std'],
+                            visible=True
+                        )
                     )
                 )
-            )
-            
-            # Update layout
-            fig.update_layout(
-                title=f"Seasonality Analysis of {y_col} by {period_type}",
-                xaxis_title=period_type,
-                yaxis_title=f"Mean {y_col} (with Std Dev)"
-            )
-            
-            # Show plot
-            st.plotly_chart(fig, use_container_width=True)
+                
+                # Update layout
+                fig.update_layout(
+                    title=f"Seasonality Analysis of {y_col} by {period_type}",
+                    xaxis_title=period_type,
+                    yaxis_title=f"Mean {y_col} (with Std Dev)"
+                )
+                
+                # Show plot
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating seasonality bar chart: {str(e)}")
             
             # Show statistics table
             st.subheader(f"Statistics by {period_type}")
@@ -2444,80 +2343,82 @@ def render_trend_analysis():
             
             # Create heatmap based on period type
             if period_type in ["Month", "Day of Week"]:
-                # For month or day, we can also show year-on-year patterns
-                
-                if period_type == "Month":
-                    # Extract month and year
-                    df_sorted['month'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
-                    df_sorted['year'] = pd.to_datetime(df_sorted[x_col]).dt.year
-                    
-                    # Calculate monthly averages by year
-                    heatmap_data = df_sorted.groupby(['year', 'month'])[y_col].mean().unstack()
-                    
-                    # Reorder months
-                    heatmap_data = heatmap_data[period_order]
-                    
-                else:  # Day of Week
-                    # Extract day of week and week of year
-                    df_sorted['day'] = pd.to_datetime(df_sorted[x_col]).dt.day_name()
-                    
-                    # Use month or week number as the other dimension
-                    use_month = st.radio(
-                        "Second dimension for day of week heatmap:",
-                        ["Month", "Week of Year"],
-                        horizontal=True
-                    )
-                    
-                    if use_month:
-                        df_sorted['second_dim'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
-                        dim_order = ["January", "February", "March", "April", "May", "June", 
-                                   "July", "August", "September", "October", "November", "December"]
-                        dim_name = "Month"
-                    else:
-                        df_sorted['second_dim'] = pd.to_datetime(df_sorted[x_col]).dt.isocalendar().week
-                        weeks = sorted(df_sorted['second_dim'].unique())
-                        dim_order = weeks
-                        dim_name = "Week of Year"
-                    
-                    # Calculate averages
-                    heatmap_data = df_sorted.groupby(['second_dim', 'day'])[y_col].mean().unstack()
-                    
-                    # Reorder days
-                    heatmap_data = heatmap_data[period_order]
-                
-                # Create heatmap
                 try:
-                    # Convert to numpy for Plotly
-                    z_data = heatmap_data.values
+                    # For month or day, we can also show year-on-year patterns
+                    if period_type == "Month":
+                        # Extract month and year
+                        df_sorted['month'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
+                        df_sorted['year'] = pd.to_datetime(df_sorted[x_col]).dt.year
+                        
+                        # Calculate monthly averages by year
+                        heatmap_data = df_sorted.groupby(['year', 'month'])[y_col].mean().unstack()
+                        
+                        # Reorder months
+                        heatmap_data = heatmap_data[period_order]
+                        
+                    else:  # Day of Week
+                        # Extract day of week and week of year
+                        df_sorted['day'] = pd.to_datetime(df_sorted[x_col]).dt.day_name()
+                        
+                        # Use month or week number as the other dimension
+                        use_month = st.radio(
+                            "Second dimension for day of week heatmap:",
+                            ["Month", "Week of Year"],
+                            horizontal=True,
+                            key="season_use_month"
+                        )
+                        
+                        if use_month:
+                            df_sorted['second_dim'] = pd.to_datetime(df_sorted[x_col]).dt.month_name()
+                            dim_order = ["January", "February", "March", "April", "May", "June", 
+                                       "July", "August", "September", "October", "November", "December"]
+                            dim_name = "Month"
+                        else:
+                            df_sorted['second_dim'] = pd.to_datetime(df_sorted[x_col]).dt.isocalendar().week
+                            weeks = sorted(df_sorted['second_dim'].unique())
+                            dim_order = weeks
+                            dim_name = "Week of Year"
+                        
+                        # Calculate averages
+                        heatmap_data = df_sorted.groupby(['second_dim', 'day'])[y_col].mean().unstack()
+                        
+                        # Reorder days
+                        heatmap_data = heatmap_data[period_order]
                     
                     # Create heatmap
-                    fig = go.Figure(data=go.Heatmap(
-                        z=z_data,
-                        x=heatmap_data.columns,
-                        y=heatmap_data.index,
-                        colorscale='Blues',
-                        colorbar=dict(title=f"Mean {y_col}")
-                    ))
-                    
-                    # Update layout
-                    if period_type == "Month":
-                        fig.update_layout(
-                            title=f"Monthly {y_col} Heatmap by Year",
-                            xaxis_title="Month",
-                            yaxis_title="Year"
-                        )
-                    else:
-                        fig.update_layout(
-                            title=f"Day of Week {y_col} Heatmap by {dim_name}",
-                            xaxis_title="Day of Week",
-                            yaxis_title=dim_name
-                        )
-                    
-                    # Show heatmap
-                    st.plotly_chart(fig, use_container_width=True)
-                    
+                    try:
+                        # Convert to numpy for Plotly
+                        z_data = heatmap_data.values
+                        
+                        # Create heatmap
+                        fig = go.Figure(data=go.Heatmap(
+                            z=z_data,
+                            x=heatmap_data.columns,
+                            y=heatmap_data.index,
+                            colorscale='Blues',
+                            colorbar=dict(title=f"Mean {y_col}")
+                        ))
+                        
+                        # Update layout
+                        if period_type == "Month":
+                            fig.update_layout(
+                                title=f"Monthly {y_col} Heatmap by Year",
+                                xaxis_title="Month",
+                                yaxis_title="Year"
+                            )
+                        else:
+                            fig.update_layout(
+                                title=f"Day of Week {y_col} Heatmap by {dim_name}",
+                                xaxis_title="Day of Week",
+                                yaxis_title=dim_name
+                            )
+                        
+                        # Show heatmap
+                        st.plotly_chart(fig, use_container_width=True)
+                    except Exception as e:
+                        st.error(f"Error creating heatmap: {str(e)}")
                 except Exception as e:
-                    st.error(f"Error creating heatmap: {str(e)}")
+                    st.error(f"Error preparing data for heatmap: {str(e)}")
             
         except Exception as e:
             st.error(f"Error in seasonality analysis: {str(e)}")
@@ -2533,13 +2434,14 @@ def render_trend_analysis():
             df_sorted = st.session_state.df.sort_values(x_col)
             
             # Check if we need to resample
-            resample = st.checkbox("Resample data to regular intervals")
+            resample = st.checkbox("Resample data to regular intervals", key="decomp_resample")
             
             if resample:
                 # Frequency selection
                 freq = st.selectbox(
                     "Resampling frequency:",
-                    ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"]
+                    ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"],
+                    key="decomp_freq"
                 )
                 
                 # Map to pandas frequency string
@@ -2551,21 +2453,25 @@ def render_trend_analysis():
                     "Yearly": "YS"
                 }
                 
-                # Set date as index
-                df_sorted = df_sorted.set_index(x_col)
-                
-                # Resample
-                df_resampled = df_sorted[y_col].resample(freq_map[freq]).mean()
-                
-                # Convert back to dataframe
-                data_ts = pd.DataFrame({y_col: df_resampled})
-                
-                # Reset index
-                data_ts = data_ts.reset_index()
-                
-                # Rename index column
-                data_ts = data_ts.rename(columns={"index": x_col})
-                
+                try:
+                    # Set date as index
+                    df_sorted = df_sorted.set_index(x_col)
+                    
+                    # Resample
+                    df_resampled = df_sorted[y_col].resample(freq_map[freq]).mean()
+                    
+                    # Convert back to dataframe
+                    data_ts = pd.DataFrame({y_col: df_resampled})
+                    
+                    # Reset index
+                    data_ts = data_ts.reset_index()
+                    
+                    # Rename index column
+                    data_ts = data_ts.rename(columns={"index": x_col})
+                except Exception as e:
+                    st.error(f"Error resampling data: {str(e)}")
+                    st.info("Make sure the date column is in a proper datetime format and contains enough data points.")
+                    return
             else:
                 # Use original data
                 data_ts = df_sorted[[x_col, y_col]]
@@ -2581,117 +2487,130 @@ def render_trend_analysis():
             # Decomposition model
             model = st.selectbox(
                 "Decomposition model:",
-                ["Additive", "Multiplicative"]
+                ["Additive", "Multiplicative"],
+                key="decomp_model"
             )
             
             # Period selection
-            period = st.slider("Period (number of time units in a seasonal cycle):", 2, 52, 12)
+            period = st.slider("Period (number of time units in a seasonal cycle):", 2, 52, 12, key="decomp_period")
             
             # Perform decomposition
-            if model == "Additive":
-                result = seasonal_decompose(data_ts[y_col], model='additive', period=period)
-            else:
-                result = seasonal_decompose(data_ts[y_col], model='multiplicative', period=period)
+            try:
+                if model == "Additive":
+                    result = seasonal_decompose(data_ts[y_col], model='additive', period=period)
+                else:
+                    result = seasonal_decompose(data_ts[y_col], model='multiplicative', period=period)
+            except Exception as e:
+                st.error(f"Error performing decomposition: {str(e)}")
+                st.info("Try adjusting the period parameter or check for missing/invalid values in your data.")
+                return
             
             # Create figure with subplots
-            fig = make_subplots(
-                rows=4, cols=1,
-                subplot_titles=("Observed", "Trend", "Seasonal", "Residual"),
-                shared_xaxes=True,
-                vertical_spacing=0.05
-            )
-            
-            # Add observed data
-            fig.add_trace(
-                go.Scatter(
-                    x=data_ts.index,
-                    y=result.observed,
-                    mode="lines",
-                    name="Observed"
-                ),
-                row=1, col=1
-            )
-            
-            # Add trend
-            fig.add_trace(
-                go.Scatter(
-                    x=data_ts.index,
-                    y=result.trend,
-                    mode="lines",
-                    name="Trend",
-                    line=dict(color="red")
-                ),
-                row=2, col=1
-            )
-            
-            # Add seasonal
-            fig.add_trace(
-                go.Scatter(
-                    x=data_ts.index,
-                    y=result.seasonal,
-                    mode="lines",
-                    name="Seasonal",
-                    line=dict(color="green")
-                ),
-                row=3, col=1
-            )
-            
-            # Add residual
-            fig.add_trace(
-                go.Scatter(
-                    x=data_ts.index,
-                    y=result.resid,
-                    mode="lines",
-                    name="Residual",
-                    line=dict(color="purple")
-                ),
-                row=4, col=1
-            )
-            
-            # Update layout
-            fig.update_layout(
-                height=800,
-                title=f"{model} Decomposition of {y_col} (Period={period})",
-                showlegend=False
-            )
-            
-            # Show plot
-            st.plotly_chart(fig, use_container_width=True)
+            try:
+                fig = make_subplots(
+                    rows=4, cols=1,
+                    subplot_titles=("Observed", "Trend", "Seasonal", "Residual"),
+                    shared_xaxes=True,
+                    vertical_spacing=0.05
+                )
+                
+                # Add observed data
+                fig.add_trace(
+                    go.Scatter(
+                        x=data_ts.index,
+                        y=result.observed,
+                        mode="lines",
+                        name="Observed"
+                    ),
+                    row=1, col=1
+                )
+                
+                # Add trend
+                fig.add_trace(
+                    go.Scatter(
+                        x=data_ts.index,
+                        y=result.trend,
+                        mode="lines",
+                        name="Trend",
+                        line=dict(color="red")
+                    ),
+                    row=2, col=1
+                )
+                
+                # Add seasonal
+                fig.add_trace(
+                    go.Scatter(
+                        x=data_ts.index,
+                        y=result.seasonal,
+                        mode="lines",
+                        name="Seasonal",
+                        line=dict(color="green")
+                    ),
+                    row=3, col=1
+                )
+                
+                # Add residual
+                fig.add_trace(
+                    go.Scatter(
+                        x=data_ts.index,
+                        y=result.resid,
+                        mode="lines",
+                        name="Residual",
+                        line=dict(color="purple")
+                    ),
+                    row=4, col=1
+                )
+                
+                # Update layout
+                fig.update_layout(
+                    height=800,
+                    title=f"{model} Decomposition of {y_col} (Period={period})",
+                    showlegend=False
+                )
+                
+                # Show plot
+                st.plotly_chart(fig, use_container_width=True)
+            except Exception as e:
+                st.error(f"Error creating decomposition plot: {str(e)}")
+                return
             
             # Summary statistics
             st.subheader("Component Statistics")
             
             # Calculate statistics for each component
-            stats = pd.DataFrame({
-                "Component": ["Observed", "Trend", "Seasonal", "Residual"],
-                "Mean": [
-                    result.observed.mean(),
-                    result.trend.mean(),
-                    result.seasonal.mean(),
-                    result.resid.dropna().mean()
-                ],
-                "Std Dev": [
-                    result.observed.std(),
-                    result.trend.std(),
-                    result.seasonal.std(),
-                    result.resid.dropna().std()
-                ],
-                "Min": [
-                    result.observed.min(),
-                    result.trend.min(),
-                    result.seasonal.min(),
-                    result.resid.dropna().min()
-                ],
-                "Max": [
-                    result.observed.max(),
-                    result.trend.max(),
-                    result.seasonal.max(),
-                    result.resid.dropna().max()
-                ]
-            })
-            
-            # Display statistics
-            st.dataframe(stats.round(2), use_container_width=True)
+            try:
+                stats = pd.DataFrame({
+                    "Component": ["Observed", "Trend", "Seasonal", "Residual"],
+                    "Mean": [
+                        result.observed.mean(),
+                        result.trend.mean(),
+                        result.seasonal.mean(),
+                        result.resid.dropna().mean()
+                    ],
+                    "Std Dev": [
+                        result.observed.std(),
+                        result.trend.std(),
+                        result.seasonal.std(),
+                        result.resid.dropna().std()
+                    ],
+                    "Min": [
+                        result.observed.min(),
+                        result.trend.min(),
+                        result.seasonal.min(),
+                        result.resid.dropna().min()
+                    ],
+                    "Max": [
+                        result.observed.max(),
+                        result.trend.max(),
+                        result.seasonal.max(),
+                        result.resid.dropna().max()
+                    ]
+                })
+                
+                # Display statistics
+                st.dataframe(stats.round(2), use_container_width=True)
+            except Exception as e:
+                st.error(f"Error calculating component statistics: {str(e)}")
             
         except Exception as e:
             st.error(f"Error in trend decomposition: {str(e)}")
@@ -2699,36 +2618,49 @@ def render_trend_analysis():
     
     # Export options
     if 'fig' in locals():
-        export_format = st.selectbox("Export chart format:", ["PNG", "SVG", "HTML"])
+        export_format = st.selectbox("Export chart format:", ["PNG", "SVG", "HTML"], key="trend_export_format")
         
         if export_format == "HTML":
             # Export as HTML file
-            buffer = StringIO()
-            fig.write_html(buffer)
-            html_bytes = buffer.getvalue().encode()
-            
-            st.download_button(
-                label="Download Chart",
-                data=html_bytes,
-                file_name=f"trend_{analysis_type.lower().replace(' ', '_')}.html",
-                mime="text/html",
-                use_container_width=True
-            )
+            try:
+                buffer = StringIO()
+                fig.write_html(buffer)
+                html_bytes = buffer.getvalue().encode()
+                
+                st.download_button(
+                    label="Download Chart",
+                    data=html_bytes,
+                    file_name=f"trend_{analysis_type.lower().replace(' ', '_')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="trend_download_html"
+                )
+            except Exception as e:
+                st.error(f"Error exporting chart as HTML: {str(e)}")
         else:
             # Export as image
-            img_bytes = fig.to_image(format=export_format.lower())
-            
-            st.download_button(
-                label=f"Download Chart",
-                data=img_bytes,
-                file_name=f"trend_{analysis_type.lower().replace(' ', '_')}.{export_format.lower()}",
-                mime=f"image/{export_format.lower()}",
-                use_container_width=True
-            )
+            try:
+                img_bytes = fig.to_image(format=export_format.lower())
+                
+                st.download_button(
+                    label=f"Download Chart",
+                    data=img_bytes,
+                    file_name=f"trend_{analysis_type.lower().replace(' ', '_')}.{export_format.lower()}",
+                    mime=f"image/{export_format.lower()}",
+                    use_container_width=True,
+                    key=f"trend_download_{export_format.lower()}"
+                )
+            except Exception as e:
+                st.error(f"Error exporting chart as image: {str(e)}")
 
 def render_distribution_analysis():
     """Render distribution analysis tab"""
     st.subheader("Distribution Analysis")
+    
+    # Check if dataframe exists and is not empty
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or len(st.session_state.df) == 0:
+        st.warning("No data loaded. Please upload a CSV file first.")
+        return
     
     # Get numeric columns
     num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
@@ -2740,45 +2672,59 @@ def render_distribution_analysis():
     # Column selection
     selected_col = st.selectbox(
         "Select column for distribution analysis:",
-        num_cols
+        num_cols,
+        key="dist_selected_col"
     )
+    
+    # Validate that selected column exists
+    if selected_col not in st.session_state.df.columns:
+        st.error(f"Selected column '{selected_col}' not found in the dataset.")
+        return
     
     # Analysis type selection
     analysis_type = st.radio(
         "Analysis type:",
         ["Histogram", "Density Plot", "Box Plot", "Q-Q Plot", "Distribution Fitting"],
-        horizontal=True
+        horizontal=True,
+        key="distribution_analysis_type"
     )
     
     if analysis_type == "Histogram":
         # Histogram options
-        n_bins = st.slider("Number of bins:", 5, 100, 20)
+        n_bins = st.slider("Number of bins:", 5, 100, 20, key="hist_n_bins")
         
         # Create histogram
-        fig = px.histogram(
-            st.session_state.df,
-            x=selected_col,
-            nbins=n_bins,
-            title=f"Histogram of {selected_col}",
-            marginal="box"
-        )
-        
-        # Show histogram
-        st.plotly_chart(fig, use_container_width=True)
+        try:
+            fig = px.histogram(
+                st.session_state.df,
+                x=selected_col,
+                nbins=n_bins,
+                title=f"Histogram of {selected_col}",
+                marginal="box"
+            )
+            
+            # Show histogram
+            st.plotly_chart(fig, use_container_width=True)
+        except Exception as e:
+            st.error(f"Error creating histogram: {str(e)}")
+            return
         
         # Calculate basic statistics
-        stats = st.session_state.df[selected_col].describe().to_dict()
-        
-        # Display statistics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Mean", f"{stats['mean']:.3f}")
-        with col2:
-            st.metric("Median", f"{stats['50%']:.3f}")
-        with col3:
-            st.metric("Std Dev", f"{stats['std']:.3f}")
-        with col4:
-            st.metric("Count", f"{stats['count']}")
+        try:
+            stats = st.session_state.df[selected_col].describe().to_dict()
+            
+            # Display statistics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Mean", f"{stats['mean']:.3f}")
+            with col2:
+                st.metric("Median", f"{stats['50%']:.3f}")
+            with col3:
+                st.metric("Std Dev", f"{stats['std']:.3f}")
+            with col4:
+                st.metric("Count", f"{int(stats['count'])}")
+        except Exception as e:
+            st.error(f"Error calculating statistics: {str(e)}")
         
     elif analysis_type == "Density Plot":
         # Create KDE plot
@@ -2787,6 +2733,10 @@ def render_distribution_analysis():
             
             # Get data
             data = st.session_state.df[selected_col].dropna()
+            
+            if len(data) < 2:
+                st.error("Not enough valid data points for density estimation.")
+                return
             
             # Calculate KDE
             kde_x = np.linspace(data.min(), data.max(), 1000)
@@ -2797,7 +2747,7 @@ def render_distribution_analysis():
             fig = go.Figure()
             
             # Add histogram
-            show_hist = st.checkbox("Show histogram with density plot", value=True)
+            show_hist = st.checkbox("Show histogram with density plot", value=True, key="kde_show_hist")
             if show_hist:
                 fig.add_trace(
                     go.Histogram(
@@ -2871,7 +2821,7 @@ def render_distribution_analysis():
         
     elif analysis_type == "Box Plot":
         # Optional grouping
-        use_grouping = st.checkbox("Group by a categorical column")
+        use_grouping = st.checkbox("Group by a categorical column", key="box_use_grouping")
         
         if use_grouping:
             # Get categorical columns
@@ -2881,75 +2831,92 @@ def render_distribution_analysis():
                 st.warning("No categorical columns found for grouping.")
                 use_grouping = False
             else:
-                group_col = st.selectbox("Group by:", cat_cols)
+                group_col = st.selectbox("Group by:", cat_cols, key="box_group_col")
                 
-                # Limit number of groups
-                top_n = st.slider("Show top N groups:", 2, 20, 10)
-                
-                # Get top groups
-                top_groups = st.session_state.df[group_col].value_counts().nlargest(top_n).index.tolist()
-                
-                # Filter to top groups
-                filtered_df = st.session_state.df[st.session_state.df[group_col].isin(top_groups)]
-                
-                # Create grouped box plot
+                # Validate group column exists
+                if group_col not in st.session_state.df.columns:
+                    st.error(f"Selected grouping column '{group_col}' not found in the dataset.")
+                    use_grouping = False
+                else:
+                    # Limit number of groups
+                    top_n = st.slider("Show top N groups:", 2, 20, 10, key="box_top_n")
+                    
+                    # Get top groups
+                    top_groups = st.session_state.df[group_col].value_counts().nlargest(top_n).index.tolist()
+                    
+                    # Filter to top groups
+                    filtered_df = st.session_state.df[st.session_state.df[group_col].isin(top_groups)]
+                    
+                    try:
+                        # Create grouped box plot
+                        fig = px.box(
+                            filtered_df,
+                            x=group_col,
+                            y=selected_col,
+                            title=f"Box Plot of {selected_col} by {group_col}",
+                            points="all"
+                        )
+                    except Exception as e:
+                        st.error(f"Error creating grouped box plot: {str(e)}")
+                        use_grouping = False
+        
+        if not use_grouping:
+            try:
+                # Simple box plot
                 fig = px.box(
-                    filtered_df,
-                    x=group_col,
+                    st.session_state.df,
                     y=selected_col,
-                    title=f"Box Plot of {selected_col} by {group_col}",
+                    title=f"Box Plot of {selected_col}",
                     points="all"
                 )
-        
-        if not use_grouping or not cat_cols:
-            # Simple box plot
-            fig = px.box(
-                st.session_state.df,
-                y=selected_col,
-                title=f"Box Plot of {selected_col}",
-                points="all"
-            )
+            except Exception as e:
+                st.error(f"Error creating box plot: {str(e)}")
+                return
         
         # Show box plot
         st.plotly_chart(fig, use_container_width=True)
         
         # Calculate quartiles and IQR
-        q1 = st.session_state.df[selected_col].quantile(0.25)
-        q3 = st.session_state.df[selected_col].quantile(0.75)
-        iqr = q3 - q1
-        
-        # Display statistics
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric("Min", f"{st.session_state.df[selected_col].min():.3f}")
-        with col2:
-            st.metric("Q1 (25%)", f"{q1:.3f}")
-        with col3:
-            st.metric("Median", f"{st.session_state.df[selected_col].median():.3f}")
-        with col4:
-            st.metric("Q3 (75%)", f"{q3:.3f}")
-        
-        col1, col2, col3 = st.columns([1, 1, 2])
-        with col1:
-            st.metric("Max", f"{st.session_state.df[selected_col].max():.3f}")
-        with col2:
-            st.metric("IQR", f"{iqr:.3f}")
-        with col3:
-            # Calculate outlier bounds
-            lower_bound = q1 - 1.5 * iqr
-            upper_bound = q3 + 1.5 * iqr
+        try:
+            q1 = st.session_state.df[selected_col].quantile(0.25)
+            q3 = st.session_state.df[selected_col].quantile(0.75)
+            iqr = q3 - q1
             
-            # Count outliers
-            outliers = st.session_state.df[(st.session_state.df[selected_col] < lower_bound) | 
-                                  (st.session_state.df[selected_col] > upper_bound)]
+            # Display statistics
+            col1, col2, col3, col4 = st.columns(4)
+            with col1:
+                st.metric("Min", f"{st.session_state.df[selected_col].min():.3f}")
+            with col2:
+                st.metric("Q1 (25%)", f"{q1:.3f}")
+            with col3:
+                st.metric("Median", f"{st.session_state.df[selected_col].median():.3f}")
+            with col4:
+                st.metric("Q3 (75%)", f"{q3:.3f}")
             
-            st.metric("Outliers", f"{len(outliers)} ({len(outliers)/len(st.session_state.df)*100:.1f}%)")
+            col1, col2, col3 = st.columns([1, 1, 2])
+            with col1:
+                st.metric("Max", f"{st.session_state.df[selected_col].max():.3f}")
+            with col2:
+                st.metric("IQR", f"{iqr:.3f}")
+            with col3:
+                # Calculate outlier bounds
+                lower_bound = q1 - 1.5 * iqr
+                upper_bound = q3 + 1.5 * iqr
+                
+                # Count outliers
+                outliers = st.session_state.df[(st.session_state.df[selected_col] < lower_bound) | 
+                                      (st.session_state.df[selected_col] > upper_bound)]
+                
+                st.metric("Outliers", f"{len(outliers)} ({len(outliers)/len(st.session_state.df)*100:.1f}%)")
+        except Exception as e:
+            st.error(f"Error calculating box plot statistics: {str(e)}")
         
     elif analysis_type == "Q-Q Plot":
         # Distribution selection
         dist = st.selectbox(
             "Reference distribution:",
-            ["Normal", "Uniform", "Exponential", "Log-normal"]
+            ["Normal", "Uniform", "Exponential", "Log-normal"],
+            key="qq_dist"
         )
         
         # Create Q-Q plot
@@ -2958,6 +2925,10 @@ def render_distribution_analysis():
             
             # Get data
             data = st.session_state.df[selected_col].dropna()
+            
+            if len(data) < 2:
+                st.error("Not enough valid data points for Q-Q plot.")
+                return
             
             # Calculate theoretical quantiles
             if dist == "Normal":
@@ -3043,6 +3014,10 @@ def render_distribution_analysis():
             # Get data
             data = st.session_state.df[selected_col].dropna()
             
+            if len(data) < 10:
+                st.error("Need at least 10 valid data points for distribution fitting.")
+                return
+            
             # Distributions to try
             distributions = [
                 ("Normal", scipy_stats.norm),
@@ -3057,7 +3032,8 @@ def render_distribution_analysis():
             selected_dists = st.multiselect(
                 "Select distributions to fit:",
                 [d[0] for d in distributions],
-                default=["Normal", "Log-normal", "Gamma"]
+                default=["Normal", "Log-normal", "Gamma"],
+                key="dist_selected_dists"
             )
             
             if not selected_dists:
@@ -3254,30 +3230,35 @@ def render_distribution_analysis():
             return
     
     # Export options
-    export_format = st.selectbox("Export chart format:", ["PNG", "SVG", "HTML"])
-    
     if 'fig' in locals():
-        if export_format == "HTML":
-            # Export as HTML file
-            buffer = StringIO()
-            fig.write_html(buffer)
-            html_bytes = buffer.getvalue().encode()
-            
-            st.download_button(
-                label="Download Chart",
-                data=html_bytes,
-                file_name=f"distribution_{analysis_type.lower().replace(' ', '_')}.html",
-                mime="text/html",
-                use_container_width=True
-            )
-        else:
-            # Export as image
-            img_bytes = fig.to_image(format=export_format.lower())
-            
-            st.download_button(
-                label=f"Download Chart",
-                data=img_bytes,
-                file_name=f"distribution_{analysis_type.lower().replace(' ', '_')}.{export_format.lower()}",
-                mime=f"image/{export_format.lower()}",
-                use_container_width=True
-            )
+        export_format = st.selectbox("Export chart format:", ["PNG", "SVG", "HTML"], key="dist_export_format")
+        
+        try:
+            if export_format == "HTML":
+                # Export as HTML file
+                buffer = StringIO()
+                fig.write_html(buffer)
+                html_bytes = buffer.getvalue().encode()
+                
+                st.download_button(
+                    label="Download Chart",
+                    data=html_bytes,
+                    file_name=f"distribution_{analysis_type.lower().replace(' ', '_')}.html",
+                    mime="text/html",
+                    use_container_width=True,
+                    key="dist_download_html"
+                )
+            else:
+                # Export as image
+                img_bytes = fig.to_image(format=export_format.lower())
+                
+                st.download_button(
+                    label=f"Download Chart",
+                    data=img_bytes,
+                    file_name=f"distribution_{analysis_type.lower().replace(' ', '_')}.{export_format.lower()}",
+                    mime=f"image/{export_format.lower()}",
+                    use_container_width=True,
+                    key=f"dist_download_{export_format.lower()}"
+                )
+        except Exception as e:
+            st.error(f"Error exporting chart: {str(e)}")

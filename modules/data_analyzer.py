@@ -328,7 +328,7 @@ class DataAnalyzer:
         st.dataframe(corr_matrix.style.background_gradient(cmap='coolwarm', axis=None), use_container_width=True)
         
         # Visualization options
-        viz_type = st.radio("Visualization Type", ["Heatmap", "Pairplot", "Scatter Matrix"], horizontal=True)
+        viz_type = st.radio("Visualization Type", ["Heatmap", "Pairplot", "Scatter Matrix"], horizontal=True, key="viz_type")
         
         # Create correlation heatmap
         if viz_type == "Heatmap":
@@ -480,7 +480,8 @@ class DataAnalyzer:
             viz_type = st.radio(
                 "Select visualization type:", 
                 ["Histogram with KDE", "Box Plot", "Violin Plot", "ECDF"], 
-                horizontal=True
+                horizontal=True,
+                key=f"viz_type_{selected_col}"  # Ensure unique key for each selectbox
             )
             
             # Create selected visualization

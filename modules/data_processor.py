@@ -6,6 +6,7 @@ import re
 from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
 import plotly.express as px
 import plotly.graph_objects as go
+from modules.data_exporter import DataExporter
 
 def render_data_processing():
     """Render data processing section"""
@@ -2417,7 +2418,8 @@ def render_feature_engineering():
             # Reference point selection
             reference_type = st.radio(
                 "Reference point type:",
-                ["Mean", "Median", "Min", "Max", "Custom"]
+                ["Mean", "Median", "Min", "Max", "Custom"],
+                key="reference_type"
             )
             
             # For custom reference point
@@ -2915,7 +2917,8 @@ def render_data_filtering():
         
         # Condition combination
         if len(conditions) > 1:
-            combine_op = st.radio("Combine conditions with:", ["AND", "OR"], horizontal=True)
+            combine_op = st.radio("Combine conditions with:", ["AND", "OR"], horizontal=True),
+        key="combine_op"
         
         # Apply filters button
         if st.button("Apply Filters", use_container_width=True):
@@ -3020,7 +3023,8 @@ def render_data_filtering():
             sample_size_type = st.radio(
                 "Sample size as:",
                 ["Percentage", "Number of rows"],
-                horizontal=True
+                horizontal=True,
+                key="sample_size_type"
             )
             
             if sample_size_type == "Percentage":
@@ -3149,7 +3153,8 @@ def render_data_filtering():
             select_type = st.radio(
                 "Select:",
                 ["First N Rows", "Last N Rows"],
-                horizontal=True
+                horizontal=True,
+                key="select_type"
             )
             
             n_rows = st.number_input(
@@ -3233,7 +3238,8 @@ def render_column_management():
         rename_method = st.radio(
             "Rename method:",
             ["Individual Columns", "Bulk Rename with Pattern"],
-            horizontal=True
+            horizontal=True,
+            key="rename_method"
         )
         
         if rename_method == "Individual Columns":
@@ -3352,7 +3358,8 @@ def render_column_management():
             apply_to = st.radio(
                 "Apply to:",
                 ["All Columns", "Selected Columns"],
-                horizontal=True
+                horizontal=True,
+                key="apply_to"
             )
             
             selected_cols = None
@@ -3432,7 +3439,8 @@ def render_column_management():
         operation = st.radio(
             "Operation:",
             ["Keep Selected Columns", "Drop Selected Columns"],
-            horizontal=True
+            horizontal=True,
+            key="column_operation"
         )
         
         # Column selection
@@ -3448,7 +3456,8 @@ def render_column_management():
         selection_method = st.radio(
             "Selection method:",
             ["Manual Selection", "Pattern Selection", "Data Type Selection"],
-            horizontal=True
+            horizontal=True,
+            key="selection_method"
         )
         
         if selection_method == "Manual Selection":
@@ -3550,7 +3559,8 @@ def render_column_management():
         reorder_method = st.radio(
             "Reorder method:",
             ["Manual Reordering", "Alphabetical", "Move to Front/Back"],
-            horizontal=True
+            horizontal=True,
+            key="reorder_method"
         )
         
         if reorder_method == "Manual Reordering":
@@ -3577,7 +3587,8 @@ def render_column_management():
             sort_order = st.radio(
                 "Sort order:",
                 ["Ascending (A-Z)", "Descending (Z-A)"],
-                horizontal=True
+                horizontal=True,
+                key="sort_order"
             )
             
             # Sort columns
@@ -3595,7 +3606,8 @@ def render_column_management():
             move_direction = st.radio(
                 "Move direction:",
                 ["Move to Front", "Move to Back"],
-                horizontal=True
+                horizontal=True,
+                key="move_direction"
             )
             
             # Column selection
@@ -3859,7 +3871,8 @@ def render_column_management():
                     operation = st.radio(
                         "Operation:",
                         ["Add", "Subtract", "Multiply", "Divide"],
-                        horizontal=True
+                        horizontal=True,
+                        key="math_operation",
                     )
                     
                     # Preview

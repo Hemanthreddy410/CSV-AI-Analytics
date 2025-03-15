@@ -76,7 +76,7 @@ def render_data_overview():
         
         with control_col2:
             # View options
-            view_option = st.radio("View:", ["Head", "Tail", "Sample"], horizontal=True)
+            view_option = st.radio("View:", ["Head", "Tail", "Sample"], horizontal=True, key="view_option_preview")
         
         with control_col3:
             # Column filter
@@ -300,7 +300,7 @@ def render_data_overview():
                 "Display options:",
                 ["Show sample of duplicates", "Show all duplicates", "Show duplicate values counts"],
                 key="dup_display_options",
-                horizontal=True
+                horizontal=True,
             )
             
             if show_option == "Show sample of duplicates":

@@ -149,7 +149,7 @@ class DashboardGenerator:
                 col1, col2 = st.columns(2)
                 with col1:
                     x_col = st.selectbox("X-axis", cat_cols + date_cols if cat_cols or date_cols else num_cols)
-                    orientation = st.radio("Orientation", ["Vertical", "Horizontal"], horizontal=True)
+                    orientation = st.radio("Orientation", ["Vertical", "Horizontal"], horizontal=True,key="orientation_1")
                 
                 with col2:
                     y_col = st.selectbox("Y-axis", num_cols if num_cols else ["No numeric columns available"])
@@ -598,7 +598,7 @@ class DashboardGenerator:
             # Filter layout
             col1, col2 = st.columns(2)
             with col1:
-                orientation = st.radio("Orientation", ["Horizontal", "Vertical"], horizontal=True)
+                orientation = st.radio("Orientation", ["Horizontal", "Vertical"], horizontal=True,key="orientation_2")
             
             with col2:
                 auto_apply = st.checkbox("Auto-apply filter", value=True)
@@ -1188,7 +1188,7 @@ class DashboardGenerator:
                         filter_value = st.radio(
                             f"Select {column}",
                             options,
-                            key=filter_key
+                            key="filter_key"
                         )
                     
                     elif filter_control == "Checkbox":
