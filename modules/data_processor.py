@@ -2748,7 +2748,7 @@ def render_data_filtering():
             # Condition 1
             col1a, col1b, col1c = st.columns([2, 1, 2])
             with col1a:
-                filter_col = st.selectbox("Column", all_cols, key="filter_col_1")
+                filter_col = st.selectbox("Column", all_cols, key="filter_col_12")
             
             with col1b:
                 # Choose operator based on column type

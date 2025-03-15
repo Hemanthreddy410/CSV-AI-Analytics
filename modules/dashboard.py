@@ -2753,7 +2753,8 @@ def render_dashboard():
                 dashboard_generator.render_filter(filter_config, key_suffix=f"dash_{i}")
         
         # Apply filters button
-        if st.button("Apply Filters", use_container_width=True):
+        # if st.button("Apply Filters", use_container_width=True):
+        if st.button("Apply Filters", key="dashboard_apply_filters", use_container_width=True):
             filtered_df = dashboard_generator.apply_filters(filter_configs)
     
     # Display metrics

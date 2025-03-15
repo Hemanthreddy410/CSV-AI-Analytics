@@ -949,7 +949,7 @@ def render_trend_analysis():
     for col in st.session_state.df.columns:
         try:
             # Check if column can be converted to datetime
-            pd.to_datetime(st.session_state.df[col])
+            pd.to_datetime(st.session_state.df[col], format='%Y-%m-%d')
             date_cols.append(col)
         except:
             pass
