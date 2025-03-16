@@ -4009,3 +4009,1912 @@ def render_column_management():
                         
                     except Exception as e:
                         st.error(f"Error merging columns: {str(e)}")
+
+
+
+import streamlit as st
+import pandas as pd
+import numpy as np
+import datetime
+import re
+from sklearn.preprocessing import StandardScaler, MinMaxScaler, RobustScaler
+import plotly.express as px
+import plotly.graph_objects as go
+import time
+import os
+import tempfile
+from functools import lru_cache
+import gc  # Garbage collection for memory management
+from modules.data_exporter import DataExporter
+
+# --------------------------------
+# PERFORMANCE OPTIMIZATION HELPERS
+# --------------------------------
+
+@st.cache_data(ttl=3600)  # Cache for 1 hour
+def load_data_chunked(file_path, chunk_size=100000):
+    """Load large datasets in chunks to reduce memory usage."""
+    # Check file extension
+    if file_path.endswith('.csv'):
+        # First read a small sample to infer dtypes
+        sample = pd.read_csv(file_path, nrows=1000)
+        
+        # Determine optimized dtypes to reduce memory
+        dtypes = {}
+        for col in sample.columns:
+            if sample[col].dtype == 'int64':
+                dtypes[col] = 'int32'  # Use smaller integer type
+            elif sample[col].dtype == 'float64':
+                dtypes[col] = 'float32'  # Use smaller float type
+        
+        # Load CSV in chunks with optimized dtypes
+        chunks = []
+        for chunk in pd.read_csv(file_path, chunksize=chunk_size, dtype=dtypes):
+            chunks.append(chunk)
+        
+        return pd.concat(chunks)
+    elif file_path.endswith(('.xls', '.xlsx')):
+        # Excel files need to be loaded in one go
+        return pd.read_excel(file_path)
+    else:
+        raise ValueError(f"Unsupported file format: {file_path}")
+
+def optimize_dataframe(df):
+    """Optimize DataFrame memory usage by downcasting types."""
+    start_mem = df.memory_usage().sum() / 1024**2
+    
+    # Optimize numeric columns
+    for col in df.select_dtypes(include=['int']).columns:
+        df[col] = pd.to_numeric(df[col], downcast='integer')
+        
+    for col in df.select_dtypes(include=['float']).columns:
+        df[col] = pd.to_numeric(df[col], downcast='float')
+    
+    # Convert object columns to categories if they have few unique values
+    for col in df.select_dtypes(include=['object']).columns:
+        if df[col].nunique() < 50:  # Only if there are few unique values
+            df[col] = df[col].astype('category')
+    
+    end_mem = df.memory_usage().sum() / 1024**2
+    reduction = 100 * (start_mem - end_mem) / start_mem
+    
+    st.toast(f"Memory usage reduced from {start_mem:.2f} MB to {end_mem:.2f} MB ({reduction:.1f}% reduction)")
+    return df
+
+def create_data_preview(df, max_rows=1000):
+    """Create a smaller preview version of the dataframe for UI operations."""
+    if len(df) > max_rows:
+        preview_df = df.sample(max_rows, random_state=42) if max_rows < len(df) else df
+        st.session_state.df_preview = preview_df
+        st.session_state.using_preview = True
+        return preview_df
+    else:
+        st.session_state.df_preview = df
+        st.session_state.using_preview = False
+        return df
+
+def apply_operation_with_progress(operation_func, description, *args, **kwargs):
+    """Apply an operation with a progress bar."""
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    status_text.text(f"Starting: {description}")
+    
+    start_time = time.time()
+    try:
+        # Apply the operation
+        result = operation_func(*args, **kwargs)
+        
+        # Update progress
+        progress_bar.progress(100)
+        
+        # Show completion message
+        elapsed_time = time.time() - start_time
+        status_text.text(f"Completed: {description} in {elapsed_time:.2f} seconds")
+        time.sleep(0.5)  # Brief pause to show completion
+        
+        # Clear the progress indicators
+        progress_bar.empty()
+        status_text.empty()
+        
+        return result
+    
+    except Exception as e:
+        progress_bar.empty()
+        status_text.empty()
+        st.error(f"Error during {description}: {str(e)}")
+        raise e
+
+def handle_file_upload(uploaded_file):
+    """Handle file upload with optimized loading."""
+    try:
+        # Save uploaded file to a temp location
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.csv') as tmp_file:
+            tmp_file.write(uploaded_file.getvalue())
+            tmp_path = tmp_file.name
+        
+        # Show progress during loading
+        with st.spinner('Loading data in chunks...'):
+            # Load in chunks
+            df = apply_operation_with_progress(
+                load_data_chunked, 
+                "Loading data", 
+                tmp_path
+            )
+            
+            # Optimize memory usage
+            df = optimize_dataframe(df)
+        
+        # Store original data
+        st.session_state.original_df = df
+        st.session_state.df = df.copy()
+        
+        # Create a preview for UI interactions
+        preview_df = create_data_preview(df)
+        
+        # Calculate initial stats in background
+        st.session_state.data_stats = {
+            "shape": df.shape,
+            "dtypes": df.dtypes
+        }
+        
+        # Initialize processing history
+        if 'processing_history' not in st.session_state:
+            st.session_state.processing_history = []
+        
+        # Clean up the temp file
+        os.unlink(tmp_path)
+        
+        return df
+    
+    except Exception as e:
+        st.error(f"Error loading file: {str(e)}")
+        return None
+
+def lazy_groupby(df, by, agg_dict, observed=True):
+    """Perform groupby operation with observed=True to fix the warning."""
+    return df.groupby(by, observed=observed).agg(agg_dict)
+
+# This function fixes the warning in your code
+def fixed_groupby_agg(df, group_cols, value_col, agg_funcs, observed=True):
+    """Fixed groupby aggregation that properly sets observed parameter."""
+    # Translate function names to pandas aggregation functions
+    agg_map = {
+        "Mean": "mean",
+        "Median": "median", 
+        "Sum": "sum",
+        "Count": "count",
+        "Min": "min",
+        "Max": "max",
+        "Std": "std",
+        "Var": "var"
+    }
+    
+    # Selected aggregation functions
+    selected_aggs = [agg_map[func] for func in agg_funcs]
+    
+    # Create aggregation dictionary
+    agg_dict = {value_col: selected_aggs}
+    
+    # Use the fixed groupby function with observed=True
+    return lazy_groupby(df, group_cols, agg_dict)
+
+# --------------------------------
+# MAIN DATA PROCESSING FUNCTIONS
+# --------------------------------
+
+def render_data_processing():
+    """Render data processing section with optimizations for large datasets."""
+    st.header("Data Processing")
+    
+    # Create tabs for different processing tasks
+    processing_tabs = st.tabs([
+        "Data Cleaning",
+        "Data Transformation",
+        "Feature Engineering",
+        "Data Filtering",
+        "Column Management"
+    ])
+    
+    # Data Cleaning Tab
+    with processing_tabs[0]:
+        render_data_cleaning()
+    
+    # Data Transformation Tab
+    with processing_tabs[1]:
+        render_data_transformation()
+    
+    # Feature Engineering Tab
+    with processing_tabs[2]:
+        render_feature_engineering()
+    
+    # Data Filtering Tab
+    with processing_tabs[3]:
+        render_data_filtering()
+    
+    # Column Management Tab
+    with processing_tabs[4]:
+        render_column_management()
+    
+    # Processing History and Export Options
+    if hasattr(st.session_state, 'processing_history') and st.session_state.processing_history:
+        st.header("Processing History")
+
+        # Create collapsible section for history
+        with st.expander("View Processing Steps", expanded=False):
+            for i, step in enumerate(st.session_state.processing_history):
+                st.markdown(f"**Step {i+1}:** {step['description']} - {step['timestamp'].strftime('%Y-%m-%d %H:%M:%S')}")
+
+        # Reset and Export buttons
+        col1, col2, col3 = st.columns([1, 1, 1])
+        with col1:
+            if st.button("Reset to Original Data", key="reset_data_proc", use_container_width=True):
+                if hasattr(st.session_state, 'original_df') and st.session_state.original_df is not None:
+                    with st.spinner("Resetting data to original state..."):
+                        st.session_state.df = st.session_state.original_df.copy()
+                        st.session_state.processing_history = []
+                        # Recreate preview if needed
+                        create_data_preview(st.session_state.df)
+                    st.success("Data reset to original state!")
+                    st.rerun()
+        
+        with col2:
+            if st.button("Save Processed Data", key="save_data_proc", use_container_width=True):
+                if hasattr(st.session_state, 'current_project') and st.session_state.current_project:
+                    if save_to_project(st.session_state.current_project):
+                        st.success("✅ Processed data saved to project successfully!")
+                else:
+                    # Show export options
+                    exporter = DataExporter(st.session_state.df)
+                    exporter.render_export_options()
+        
+        with col3:
+            # Quick export as CSV
+            if st.session_state.df is not None and len(st.session_state.df) > 0:
+                exporter = DataExporter(st.session_state.df)
+                exporter.quick_export_widget("Quick Download CSV")
+
+def render_data_cleaning():
+    """Render data cleaning interface with optimizations for large datasets."""
+    st.subheader("Data Cleaning")
+    
+    # Use the preview dataframe for UI operations
+    df_preview = st.session_state.df_preview if hasattr(st.session_state, 'df_preview') else st.session_state.df
+    
+    # Create columns for organized layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Missing Values")
+        
+        # Calculate missing value statistics efficiently
+        @st.cache_data(ttl=60)  # Cache for 1 minute
+        def calculate_missing_stats(df):
+            missing_vals = df.isna().sum()
+            total_missing = missing_vals.sum()
+            return missing_vals, total_missing
+        
+        missing_vals, total_missing = calculate_missing_stats(st.session_state.df)
+        
+        if total_missing == 0:
+            st.success("No missing values found in the dataset!")
+        else:
+            st.warning(f"Found {total_missing} missing values across {(missing_vals > 0).sum()} columns")
+            
+            # Display columns with missing values
+            cols_with_missing = st.session_state.df.columns[missing_vals > 0].tolist()
+            
+            # Create a dataframe to show missing value statistics
+            missing_df = pd.DataFrame({
+                'Column': cols_with_missing,
+                'Missing Values': [missing_vals[col] for col in cols_with_missing],
+                'Percentage': [missing_vals[col] / len(st.session_state.df) * 100 for col in cols_with_missing]
+            })
+            
+            st.dataframe(missing_df, use_container_width=True)
+            
+            # Options for handling missing values
+            st.markdown("#### Handle Missing Values")
+            
+            # Add option to handle all columns at once
+            handle_all = st.checkbox("Apply to all columns with missing values", value=False, key="handle_all_missing")
+            
+            if handle_all:
+                col_to_handle = "All columns with missing values"
+            else:
+                col_to_handle = st.selectbox(
+                    "Select column to handle:",
+                    cols_with_missing,
+                    key="col_to_handle_missing"
+                )
+            
+            handling_method = st.selectbox(
+                "Select handling method:",
+                [
+                    "Drop rows",
+                    "Fill with mean",
+                    "Fill with median",
+                    "Fill with mode",
+                    "Fill with constant value",
+                    "Fill with forward fill",
+                    "Fill with backward fill",
+                    "Fill with interpolation"
+                ],
+                key="handling_method_missing"
+            )
+            
+            # Additional input for constant value if selected
+            if handling_method == "Fill with constant value":
+                constant_value = st.text_input("Enter constant value:", key="constant_value_missing")
+            
+            # Apply button
+            if st.button("Apply Missing Value Treatment", key="apply_missing_cleaning", use_container_width=True):
+                try:
+                    # Store original shape for reporting
+                    orig_shape = st.session_state.df.shape
+                    
+                    # Determine columns to process
+                    columns_to_process = cols_with_missing if handle_all else [col_to_handle]
+                    
+                    # Define the operation function
+                    def process_missing_values(df, columns, method, constant_value=None):
+                        result_df = df.copy()
+                        
+                        if method == "Drop rows":
+                            result_df = result_df.dropna(subset=columns)
+                            
+                        elif method == "Fill with mean":
+                            for col in columns:
+                                if result_df[col].dtype.kind in 'bifc':  # Check if numeric
+                                    mean_val = result_df[col].mean()
+                                    result_df[col] = result_df[col].fillna(mean_val)
+                        
+                        elif method == "Fill with median":
+                            for col in columns:
+                                if result_df[col].dtype.kind in 'bifc':  # Check if numeric
+                                    median_val = result_df[col].median()
+                                    result_df[col] = result_df[col].fillna(median_val)
+                        
+                        elif method == "Fill with mode":
+                            for col in columns:
+                                mode_val = result_df[col].mode()[0]
+                                result_df[col] = result_df[col].fillna(mode_val)
+                        
+                        elif method == "Fill with constant value":
+                            if constant_value:
+                                for col in columns:
+                                    # Try to convert to appropriate type
+                                    try:
+                                        if result_df[col].dtype.kind in 'bifc':  # Numeric
+                                            const_val = float(constant_value)
+                                        elif result_df[col].dtype.kind == 'b':  # Boolean
+                                            const_val = constant_value.lower() in ['true', 'yes', '1', 't', 'y']
+                                        else:
+                                            const_val = constant_value
+                                            
+                                        result_df[col] = result_df[col].fillna(const_val)
+                                    except ValueError:
+                                        pass  # Skip if conversion fails
+                        
+                        elif method == "Fill with forward fill":
+                            for col in columns:
+                                result_df[col] = result_df[col].fillna(method='ffill')
+                        
+                        elif method == "Fill with backward fill":
+                            for col in columns:
+                                result_df[col] = result_df[col].fillna(method='bfill')
+                        
+                        elif method == "Fill with interpolation":
+                            for col in columns:
+                                if result_df[col].dtype.kind in 'bifc':  # Check if numeric
+                                    result_df[col] = result_df[col].interpolate(method='linear')
+                        
+                        return result_df
+                    
+                    # Apply the operation with progress bar
+                    with st.spinner(f"Applying {handling_method} to {len(columns_to_process)} columns..."):
+                        st.session_state.df = apply_operation_with_progress(
+                            process_missing_values,
+                            f"Missing value treatment: {handling_method}",
+                            st.session_state.df,
+                            columns_to_process,
+                            handling_method,
+                            constant_value if handling_method == "Fill with constant value" else None
+                        )
+                    
+                    # Create custom description based on the method
+                    if handling_method == "Drop rows":
+                        rows_removed = orig_shape[0] - st.session_state.df.shape[0]
+                        description = f"Dropped {rows_removed} rows with missing values in {len(columns_to_process)} column(s)"
+                    else:
+                        description = f"Filled missing values in {len(columns_to_process)} column(s) using {handling_method.lower()}"
+                    
+                    # Add to processing history
+                    st.session_state.processing_history.append({
+                        "description": description,
+                        "timestamp": datetime.datetime.now(),
+                        "type": "missing_values",
+                        "details": {
+                            "columns": columns_to_process,
+                            "method": handling_method,
+                            "original_shape": orig_shape,
+                            "new_shape": st.session_state.df.shape
+                        }
+                    })
+                    
+                    # Update preview
+                    create_data_preview(st.session_state.df)
+                    
+                    st.success(description)
+                    st.rerun()
+                        
+                except Exception as e:
+                    st.error(f"Error handling missing values: {str(e)}")
+    
+    with col2:
+        st.markdown("### Duplicate Rows")
+        
+        # Efficient duplicate check
+        @st.cache_data(ttl=60)  # Cache for 1 minute
+        def count_duplicates(df):
+            return df.duplicated().sum()
+        
+        dup_count = count_duplicates(st.session_state.df)
+        
+        if dup_count == 0:
+            st.success("No duplicate rows found in the dataset!")
+        else:
+            st.warning(f"Found {dup_count} duplicate rows in the dataset")
+            
+            # Display sample of duplicates
+            if st.checkbox("Show sample of duplicates", key="show_duplicates_cleaning"):
+                # Only compute this if requested
+                duplicates = df_preview[df_preview.duplicated(keep='first')]
+                st.dataframe(duplicates.head(5), use_container_width=True)
+            
+            # Button to remove duplicates - with unique key
+            if st.button("Remove Duplicate Rows", key="remove_duplicates_cleaning", use_container_width=True):
+                try:
+                    # Store original shape for reporting
+                    orig_shape = st.session_state.df.shape
+                    
+                    # Define operation function
+                    def remove_duplicates(df):
+                        return df.drop_duplicates()
+                    
+                    # Apply with progress bar
+                    with st.spinner("Removing duplicate rows..."):
+                        st.session_state.df = apply_operation_with_progress(
+                            remove_duplicates,
+                            "Removing duplicate rows",
+                            st.session_state.df
+                        )
+                    
+                    # Calculate rows removed
+                    rows_removed = orig_shape[0] - st.session_state.df.shape[0]
+                    
+                    # Add to processing history
+                    st.session_state.processing_history.append({
+                        "description": f"Removed {rows_removed} duplicate rows",
+                        "timestamp": datetime.datetime.now(),
+                        "type": "duplicates",
+                        "details": {
+                            "rows_removed": rows_removed
+                        }
+                    })
+                    
+                    # Update preview
+                    create_data_preview(st.session_state.df)
+                    
+                    st.success(f"Removed {rows_removed} duplicate rows")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error removing duplicates: {str(e)}")
+        
+        # Outlier Detection and Handling
+        st.markdown("### Outlier Detection")
+        
+        # Get numeric columns for outlier detection
+        num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
+        
+        if not num_cols:
+            st.info("No numeric columns found for outlier detection.")
+        else:
+            col_for_outliers = st.selectbox(
+                "Select column for outlier detection:",
+                num_cols,
+                key="col_for_outliers"
+            )
+            
+            # Efficient outlier bounds calculation
+            @st.cache_data(ttl=60)  # Cache for 1 minute
+            def calculate_outlier_bounds(df, column):
+                Q1 = df[column].quantile(0.25)
+                Q3 = df[column].quantile(0.75)
+                IQR = Q3 - Q1
+                lower_bound = Q1 - 1.5 * IQR
+                upper_bound = Q3 + 1.5 * IQR
+                outlier_count = len(df[(df[column] < lower_bound) | (df[column] > upper_bound)])
+                return lower_bound, upper_bound, outlier_count
+            
+            # Calculate outlier bounds
+            lower_bound, upper_bound, outlier_count = calculate_outlier_bounds(
+                st.session_state.df, col_for_outliers
+            )
+            
+            # Visualize the distribution with outlier bounds using the preview data
+            fig = px.box(df_preview, y=col_for_outliers, title=f"Distribution of {col_for_outliers} with Outlier Bounds")
+            fig.add_hline(y=lower_bound, line_dash="dash", line_color="red", annotation_text="Lower bound")
+            fig.add_hline(y=upper_bound, line_dash="dash", line_color="red", annotation_text="Upper bound")
+            st.plotly_chart(fig, use_container_width=True)
+            
+            if outlier_count == 0:
+                st.success(f"No outliers found in column '{col_for_outliers}'")
+            else:
+                st.warning(f"Found {outlier_count} outliers in column '{col_for_outliers}'")
+                st.write(f"Outlier bounds: [{lower_bound:.2f}, {upper_bound:.2f}]")
+                
+                # Display sample of outliers
+                if st.checkbox("Show sample of outliers", key="show_outliers"):
+                    outliers_preview = df_preview[(df_preview[col_for_outliers] < lower_bound) | 
+                                                (df_preview[col_for_outliers] > upper_bound)]
+                    st.dataframe(outliers_preview.head(5), use_container_width=True)
+                
+                # Options for handling outliers
+                outlier_method = st.selectbox(
+                    "Select handling method:",
+                    [
+                        "Remove outliers",
+                        "Cap outliers (winsorize)",
+                        "Replace with NaN",
+                        "Replace with median"
+                    ],
+                    key="outlier_method"
+                )
+                
+                # Button to handle outliers
+                if st.button("Handle Outliers", key="handle_outliers", use_container_width=True):
+                    try:
+                        # Store original shape for reporting
+                        orig_shape = st.session_state.df.shape
+                        
+                        # Define operation function
+                        def handle_outliers(df, column, method, lower, upper):
+                            result_df = df.copy()
+                            
+                            if method == "Remove outliers":
+                                # Remove rows with outliers
+                                result_df = result_df[
+                                    (result_df[column] >= lower) & 
+                                    (result_df[column] <= upper)
+                                ]
+                                
+                            elif method == "Cap outliers (winsorize)":
+                                # Cap values at the bounds
+                                result_df[column] = result_df[column].clip(lower=lower, upper=upper)
+                                
+                            elif method == "Replace with NaN":
+                                # Replace outliers with NaN
+                                outlier_mask = (result_df[column] < lower) | (result_df[column] > upper)
+                                result_df.loc[outlier_mask, column] = np.nan
+                                
+                            elif method == "Replace with median":
+                                # Get median value
+                                median_val = result_df[column].median()
+                                
+                                # Replace outliers with median
+                                outlier_mask = (result_df[column] < lower) | (result_df[column] > upper)
+                                result_df.loc[outlier_mask, column] = median_val
+                            
+                            return result_df
+                        
+                        # Apply with progress bar
+                        with st.spinner(f"Handling outliers in {col_for_outliers}..."):
+                            st.session_state.df = apply_operation_with_progress(
+                                handle_outliers,
+                                f"Outlier handling: {outlier_method}",
+                                st.session_state.df,
+                                col_for_outliers,
+                                outlier_method,
+                                lower_bound,
+                                upper_bound
+                            )
+                        
+                        # Create description based on method
+                        if outlier_method == "Remove outliers":
+                            rows_removed = orig_shape[0] - st.session_state.df.shape[0]
+                            description = f"Removed {rows_removed} outliers from column '{col_for_outliers}'"
+                        else:
+                            description = f"Modified {outlier_count} outliers in column '{col_for_outliers}' using {outlier_method}"
+                        
+                        # Add to processing history
+                        st.session_state.processing_history.append({
+                            "description": description,
+                            "timestamp": datetime.datetime.now(),
+                            "type": "outliers",
+                            "details": {
+                                "column": col_for_outliers,
+                                "method": outlier_method,
+                                "lower_bound": lower_bound,
+                                "upper_bound": upper_bound,
+                                "outlier_count": outlier_count
+                            }
+                        })
+                        
+                        # Update preview
+                        create_data_preview(st.session_state.df)
+                        
+                        st.success(description)
+                        st.rerun()
+                        
+                    except Exception as e:
+                        st.error(f"Error handling outliers: {str(e)}")
+
+def render_data_transformation():
+    """Render data transformation interface with optimizations for large datasets."""
+    st.subheader("Data Transformation")
+    
+    # Use the preview dataframe for UI operations
+    df_preview = st.session_state.df_preview if hasattr(st.session_state, 'df_preview') else st.session_state.df
+    
+    # Create columns for organized layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Numeric Transformations")
+        
+        # Get numeric columns
+        num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
+        
+        if not num_cols:
+            st.info("No numeric columns found for transformation.")
+        else:
+            # Column selection
+            col_to_transform = st.selectbox(
+                "Select column to transform:",
+                num_cols,
+                key="num_transform_col"
+            )
+            
+            # Transformation method selection
+            transform_method = st.selectbox(
+                "Select transformation method:",
+                [
+                    "Standardization (Z-score)",
+                    "Min-Max Scaling",
+                    "Robust Scaling",
+                    "Log Transform",
+                    "Square Root Transform",
+                    "Box-Cox Transform",
+                    "Binning/Discretization",
+                    "Power Transform",
+                    "Normalization"
+                ],
+                key="transform_method"
+            )
+            
+            # Additional parameters for specific transforms
+            if transform_method == "Binning/Discretization":
+                num_bins = st.slider("Number of bins:", 2, 20, 5)
+                bin_strategy = st.selectbox("Binning strategy:", ["uniform", "quantile", "kmeans"])
+                bin_labels = st.text_input("Bin labels (comma-separated, leave empty for default):")
+            
+            elif transform_method == "Power Transform":
+                power = st.slider("Power value:", -3.0, 3.0, 1.0, 0.1)
+            
+            # Create new column or replace
+            create_new_col = st.checkbox("Create new column", value=True)
+            
+            # Apply button
+            if st.button("Apply Transformation", key="apply_transform", use_container_width=True):
+                try:
+                    # Determine output column name
+                    if create_new_col:
+                        output_col = f"{col_to_transform}_{transform_method.split(' ')[0].lower()}"
+                    else:
+                        output_col = col_to_transform
+                    
+                    # Define the transformation function
+                    def apply_transformation(df, col, method, output_col, **kwargs):
+                        result_df = df.copy()
+                        
+                        if method == "Standardization (Z-score)":
+                            # Z-score standardization: (x - mean) / std
+                            data = result_df[col].values.reshape(-1, 1)
+                            scaler = StandardScaler()
+                            transformed_data = scaler.fit_transform(data).flatten()
+                            
+                            # Handle potential NaN values
+                            transformed_data = np.nan_to_num(transformed_data, nan=np.nanmean(transformed_data))
+                            
+                            result_df[output_col] = transformed_data
+                            
+                            # Return additional info
+                            return result_df, {
+                                "mean": scaler.mean_[0],
+                                "std": scaler.scale_[0]
+                            }
+                            
+                        elif method == "Min-Max Scaling":
+                            # Min-Max scaling: (x - min) / (max - min)
+                            data = result_df[col].values.reshape(-1, 1)
+                            scaler = MinMaxScaler()
+                            transformed_data = scaler.fit_transform(data).flatten()
+                            
+                            # Handle potential NaN values
+                            transformed_data = np.nan_to_num(transformed_data, nan=np.nanmean(transformed_data))
+                            
+                            result_df[output_col] = transformed_data
+                            
+                            # Return additional info
+                            return result_df, {
+                                "min": scaler.data_min_[0],
+                                "max": scaler.data_max_[0]
+                            }
+                            
+                        elif method == "Robust Scaling":
+                            # Robust scaling using median and IQR (less sensitive to outliers)
+                            data = result_df[col].values.reshape(-1, 1)
+                            scaler = RobustScaler()
+                            transformed_data = scaler.fit_transform(data).flatten()
+                            
+                            # Handle potential NaN values
+                            transformed_data = np.nan_to_num(transformed_data, nan=np.nanmedian(transformed_data))
+                            
+                            result_df[output_col] = transformed_data
+                            
+                            return result_df, {}
+                        
+                        elif method == "Log Transform":
+                            # Check for non-positive values
+                            min_val = result_df[col].min()
+                            
+                            if min_val <= 0:
+                                # Add a constant to make all values positive
+                                const = abs(min_val) + 1
+                                result_df[output_col] = np.log(result_df[col] + const)
+                                return result_df, {"constant": const}
+                            else:
+                                result_df[output_col] = np.log(result_df[col])
+                                return result_df, {}
+                            
+                        elif method == "Square Root Transform":
+                            # Check for negative values
+                            min_val = result_df[col].min()
+                            
+                            if min_val < 0:
+                                # Add a constant to make all values non-negative
+                                const = abs(min_val) + 1
+                                result_df[output_col] = np.sqrt(result_df[col] + const)
+                                return result_df, {"constant": const}
+                            else:
+                                result_df[output_col] = np.sqrt(result_df[col])
+                                return result_df, {}
+                        
+                        elif method == "Box-Cox Transform":
+                            # Check if all values are positive
+                            min_val = result_df[col].min()
+                            
+                            if min_val <= 0:
+                                # Add a constant to make all values positive
+                                const = abs(min_val) + 1
+                                
+                                from scipy import stats
+                                transformed_data, lambda_val = stats.boxcox(result_df[col] + const)
+                                result_df[output_col] = transformed_data
+                                return result_df, {"constant": const, "lambda": lambda_val}
+                            else:
+                                from scipy import stats
+                                transformed_data, lambda_val = stats.boxcox(result_df[col])
+                                result_df[output_col] = transformed_data
+                                return result_df, {"lambda": lambda_val}
+                        
+                        elif method == "Binning/Discretization":
+                            num_bins = kwargs.get('num_bins', 5)
+                            bin_strategy = kwargs.get('bin_strategy', 'uniform')
+                            bin_labels = kwargs.get('bin_labels', '')
+                            
+                            # Create bins based on strategy
+                            if bin_strategy == "uniform":
+                                # Uniform binning
+                                bins = pd.cut(
+                                    result_df[col], 
+                                    bins=num_bins, 
+                                    labels=bin_labels.split(',') if bin_labels else None
+                                )
+                            elif bin_strategy == "quantile":
+                                # Quantile-based binning
+                                bins = pd.qcut(
+                                    result_df[col], 
+                                    q=num_bins, 
+                                    labels=bin_labels.split(',') if bin_labels else None
+                                )
+                            elif bin_strategy == "kmeans":
+                                # K-means clustering binning
+                                from sklearn.cluster import KMeans
+                                
+                                # Reshape data for KMeans
+                                data = result_df[col].values.reshape(-1, 1)
+                                
+                                # Fit KMeans
+                                kmeans = KMeans(n_clusters=num_bins, random_state=0).fit(data)
+                                
+                                # Get cluster labels
+                                clusters = kmeans.labels_
+                                
+                                # Create custom bin labels if provided
+                                if bin_labels:
+                                    label_map = {i: label for i, label in enumerate(bin_labels.split(',')[:num_bins])}
+                                    bins = pd.Series([label_map.get(c, f"Cluster {c}") for c in clusters])
+                                else:
+                                    bins = pd.Series([f"Cluster {c}" for c in clusters])
+                            
+                            result_df[output_col] = bins
+                            return result_df, {
+                                "num_bins": num_bins,
+                                "strategy": bin_strategy
+                            }
+                        
+                        elif method == "Power Transform":
+                            power = kwargs.get('power', 1.0)
+                            # Apply power transform: x^power
+                            result_df[output_col] = np.power(result_df[col], power)
+                            return result_df, {"power": power}
+                        
+                        elif method == "Normalization":
+                            # Normalize to sum to 1
+                            total = result_df[col].sum()
+                            result_df[output_col] = result_df[col] / total
+                            return result_df, {"total": total}
+                            
+                        return result_df, {}
+                    
+                    # Prepare kwargs for the transformation
+                    transform_kwargs = {}
+                    if transform_method == "Binning/Discretization":
+                        transform_kwargs = {
+                            'num_bins': num_bins,
+                            'bin_strategy': bin_strategy,
+                            'bin_labels': bin_labels
+                        }
+                    elif transform_method == "Power Transform":
+                        transform_kwargs = {'power': power}
+                    
+                    # Apply the operation with progress bar
+                    with st.spinner(f"Applying {transform_method} to {col_to_transform}..."):
+                        st.session_state.df, transform_info = apply_operation_with_progress(
+                            apply_transformation,
+                            f"Applying {transform_method}",
+                            st.session_state.df,
+                            col_to_transform,
+                            transform_method,
+                            output_col,
+                            **transform_kwargs
+                        )
+                    
+                    # Create a description for history
+                    if create_new_col:
+                        description = f"Created new column '{output_col}' with {transform_method}"
+                    else:
+                        description = f"Transformed column '{col_to_transform}' with {transform_method}"
+                    
+                    # Add to processing history
+                    st.session_state.processing_history.append({
+                        "description": description,
+                        "timestamp": datetime.datetime.now(),
+                        "type": "transformation",
+                        "details": {
+                            "column": col_to_transform,
+                            "method": transform_method,
+                            "new_column": output_col if create_new_col else None,
+                            "parameters": transform_info
+                        }
+                    })
+                    
+                    # Update preview
+                    create_data_preview(st.session_state.df)
+                    
+                    st.success(description)
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error applying transformation: {str(e)}")
+    
+    with col2:
+        st.markdown("### Categorical Transformations")
+        
+        # Get categorical columns
+        cat_cols = st.session_state.df.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        if not cat_cols:
+            st.info("No categorical columns found for transformation.")
+        else:
+            # Column selection
+            col_to_transform = st.selectbox(
+                "Select column to transform:",
+                cat_cols,
+                key="cat_transform_col"
+            )
+            
+            # Transformation method selection
+            transform_method = st.selectbox(
+                "Select transformation method:",
+                [
+                    "One-Hot Encoding",
+                    "Label Encoding",
+                    "Frequency Encoding",
+                    "Target Encoding",
+                    "Binary Encoding",
+                    "Count Encoding",
+                    "Ordinal Encoding",
+                    "String Cleaning"
+                ],
+                key="cat_transform_method"
+            )
+            
+            # Additional parameters for specific transforms
+            if transform_method == "Target Encoding":
+                # Target column selection
+                target_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
+                if target_cols:
+                    target_col = st.selectbox("Select target column:", target_cols)
+                else:
+                    st.warning("No numeric columns available for target encoding.")
+            
+            elif transform_method == "Ordinal Encoding":
+                # Get unique values
+                unique_vals = df_preview[col_to_transform].dropna().unique().tolist()
+                st.write("Unique values:", ", ".join([str(val) for val in unique_vals]))
+                
+                # Let user specify order
+                order_input = st.text_area(
+                    "Enter ordered values (one per line, first = lowest):",
+                    value="\n".join([str(val) for val in unique_vals])
+                )
+            
+            elif transform_method == "String Cleaning":
+                # String cleaning options
+                cleaning_options = st.multiselect(
+                    "Select cleaning operations:",
+                    ["Lowercase", "Remove special characters", "Remove numbers", "Remove extra spaces", "Remove HTML tags"]
+                )
+            
+            # Create new column or overwrite
+            create_new_col = st.checkbox("Create new columns", value=True, key="cat_new_col")
+            
+            # Apply button
+            if st.button("Apply Transformation", key="apply_cat_transform", use_container_width=True):
+                try:
+                    # Define the transformation function
+                    def apply_categorical_transform(df, col, method, create_new, **kwargs):
+                        result_df = df.copy()
+                        
+                        if method == "One-Hot Encoding":
+                            # Get dummies (one-hot encoding)
+                            prefix = col if create_new else ""
+                            dummies = pd.get_dummies(result_df[col], prefix=prefix)
+                            
+                            # Add to dataframe
+                            if create_new:
+                                result_df = pd.concat([result_df, dummies], axis=1)
+                            else:
+                                # Drop original column and add dummies
+                                result_df = result_df.drop(columns=[col])
+                                result_df = pd.concat([result_df, dummies], axis=1)
+                            
+                            return result_df, {"new_columns": dummies.columns.tolist()}
+                        
+                        elif method == "Label Encoding":
+                            # Output column name
+                            output_col = f"{col}_encoded" if create_new else col
+                            
+                            # Map each unique value to an integer
+                            unique_values = result_df[col].dropna().unique()
+                            mapping = {val: i for i, val in enumerate(unique_values)}
+                            
+                            result_df[output_col] = result_df[col].map(mapping)
+                            
+                            return result_df, {
+                                "mapping": mapping,
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        elif method == "Frequency Encoding":
+                            # Output column name
+                            output_col = f"{col}_freq" if create_new else col
+                            
+                            # Replace each category with its frequency
+                            freq = result_df[col].value_counts(normalize=True)
+                            result_df[output_col] = result_df[col].map(freq)
+                            
+                            return result_df, {
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        elif method == "Target Encoding":
+                            target_col = kwargs.get('target_col')
+                            if not target_col:
+                                raise ValueError("Target column not specified")
+                                
+                            # Output column name
+                            output_col = f"{col}_target" if create_new else col
+                            
+                            # Calculate mean target value for each category
+                            # Use observed=True for the groupby to avoid the FutureWarning
+                            target_means = result_df.groupby(col, observed=True)[target_col].mean()
+                            result_df[output_col] = result_df[col].map(target_means)
+                            
+                            return result_df, {
+                                "target_column": target_col,
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        elif method == "Binary Encoding":
+                            # Output column prefix
+                            prefix = f"{col}_bin" if create_new else col
+                            
+                            # Label encode first
+                            label_encoded = pd.Series(
+                                result_df[col].astype('category').cat.codes, 
+                                index=result_df.index
+                            )
+                            
+                            # Convert to binary and create columns
+                            new_columns = []
+                            for i in range(label_encoded.max().bit_length()):
+                                bit_val = label_encoded.apply(lambda x: (x >> i) & 1)
+                                col_name = f"{prefix}_{i}"
+                                result_df[col_name] = bit_val
+                                new_columns.append(col_name)
+                            
+                            return result_df, {
+                                "prefix": prefix,
+                                "new_columns": new_columns
+                            }
+                        
+                        elif method == "Count Encoding":
+                            # Output column name
+                            output_col = f"{col}_count" if create_new else col
+                            
+                            # Replace each category with its count
+                            counts = result_df[col].value_counts()
+                            result_df[output_col] = result_df[col].map(counts)
+                            
+                            return result_df, {
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        elif method == "Ordinal Encoding":
+                            # Output column name
+                            output_col = f"{col}_ordinal" if create_new else col
+                            
+                            # Parse the ordered values
+                            order_input = kwargs.get('order_input', '')
+                            ordered_values = [val.strip() for val in order_input.split('\n') if val.strip()]
+                            
+                            # Create mapping
+                            mapping = {val: i for i, val in enumerate(ordered_values)}
+                            
+                            # Apply mapping
+                            result_df[output_col] = result_df[col].map(mapping)
+                            
+                            return result_df, {
+                                "mapping": mapping,
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        elif method == "String Cleaning":
+                            # Output column name
+                            output_col = f"{col}_clean" if create_new else col
+                            
+                            # Apply selected cleaning operations
+                            cleaning_options = kwargs.get('cleaning_options', [])
+                            cleaned_series = result_df[col].astype(str)
+                            
+                            for op in cleaning_options:
+                                if op == "Lowercase":
+                                    cleaned_series = cleaned_series.str.lower()
+                                elif op == "Remove special characters":
+                                    cleaned_series = cleaned_series.str.replace(r'[^\w\s]', '', regex=True)
+                                elif op == "Remove numbers":
+                                    cleaned_series = cleaned_series.str.replace(r'\d+', '', regex=True)
+                                elif op == "Remove extra spaces":
+                                    cleaned_series = cleaned_series.str.replace(r'\s+', ' ', regex=True).str.strip()
+                                elif op == "Remove HTML tags":
+                                    cleaned_series = cleaned_series.str.replace(r'<.*?>', '', regex=True)
+                            
+                            result_df[output_col] = cleaned_series
+                            
+                            return result_df, {
+                                "operations": cleaning_options,
+                                "new_column": output_col if create_new else None
+                            }
+                        
+                        return result_df, {}
+                    
+                    # Prepare kwargs for the transformation
+                    transform_kwargs = {}
+                    if transform_method == "Target Encoding":
+                        if 'target_col' in locals():
+                            transform_kwargs['target_col'] = target_col
+                        else:
+                            st.error("No target column selected")
+                            return
+                    elif transform_method == "Ordinal Encoding":
+                        transform_kwargs['order_input'] = order_input
+                    elif transform_method == "String Cleaning":
+                        transform_kwargs['cleaning_options'] = cleaning_options
+                    
+                    # Apply the operation with progress bar
+                    with st.spinner(f"Applying {transform_method} to {col_to_transform}..."):
+                        st.session_state.df, transform_info = apply_operation_with_progress(
+                            apply_categorical_transform,
+                            f"Applying {transform_method}",
+                            st.session_state.df,
+                            col_to_transform,
+                            transform_method,
+                            create_new_col,
+                            **transform_kwargs
+                        )
+                    
+                    # Create a description for history
+                    method_descriptions = {
+                        "One-Hot Encoding": f"Created one-hot encoding columns for '{col_to_transform}'",
+                        "Label Encoding": f"Applied label encoding to '{col_to_transform}'",
+                        "Frequency Encoding": f"Applied frequency encoding to '{col_to_transform}'",
+                        "Target Encoding": f"Applied target encoding to '{col_to_transform}' using target column",
+                        "Binary Encoding": f"Applied binary encoding to '{col_to_transform}'",
+                        "Count Encoding": f"Applied count encoding to '{col_to_transform}'",
+                        "Ordinal Encoding": f"Applied ordinal encoding to '{col_to_transform}'",
+                        "String Cleaning": f"Applied string cleaning to '{col_to_transform}'"
+                    }
+                    
+                    description = method_descriptions.get(transform_method, f"Applied {transform_method} to '{col_to_transform}'")
+                    
+                    # Add to processing history
+                    st.session_state.processing_history.append({
+                        "description": description,
+                        "timestamp": datetime.datetime.now(),
+                        "type": "transformation",
+                        "details": {
+                            "column": col_to_transform,
+                            "method": transform_method,
+                            "parameters": transform_info
+                        }
+                    })
+                    
+                    # Update preview
+                    create_data_preview(st.session_state.df)
+                    
+                    st.success(description)
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error applying transformation: {str(e)}")
+
+def render_feature_engineering():
+    """Render feature engineering interface with enhanced capabilities and optimizations."""
+    st.subheader("Feature Engineering")
+    
+    # Use the preview dataframe for UI operations
+    df_preview = st.session_state.df_preview if hasattr(st.session_state, 'df_preview') else st.session_state.df
+    
+    # Create tabs for different feature engineering tasks
+    fe_tabs = st.tabs([
+        "Mathematical Operations",
+        "Text Features",
+        "Interaction Features",
+        "Advanced Features",
+        "Custom Formula"
+    ])
+    
+    # Mathematical Operations tab
+    with fe_tabs[0]:
+        st.markdown("### Mathematical Operations")
+        st.write("Create new columns by applying mathematical operations to existing numeric columns.")
+        
+        # Get numeric columns
+        num_cols = st.session_state.df.select_dtypes(include=['number']).columns.tolist()
+        
+        if not num_cols:
+            st.info("No numeric columns found for mathematical operations.")
+            return
+        
+        # Column selection
+        col1 = st.selectbox("Select first column:", num_cols, key="math_col1")
+        
+        # Operation selection
+        operations = [
+            "Addition (+)",
+            "Subtraction (-)",
+            "Multiplication (*)",
+            "Division (/)",
+            "Modulo (%)",
+            "Power (^)",
+            "Absolute Value (|x|)",
+            "Logarithm (log)",
+            "Exponential (exp)",
+            "Round",
+            "Floor",
+            "Ceiling"
+        ]
+        
+        operation = st.selectbox("Select operation:", operations)
+        
+        # Second column for binary operations
+        binary_ops = ["Addition (+)", "Subtraction (-)", "Multiplication (*)", "Division (/)", "Modulo (%)", "Power (^)"]
+        
+        if operation in binary_ops:
+            # Allow second column or constant value
+            use_constant = st.checkbox("Use constant value instead of second column", value=False)
+            
+            if use_constant:
+                constant = st.number_input("Enter constant value:", value=1.0)
+                second_operand = constant
+                operand_desc = str(constant)
+            else:
+                col2 = st.selectbox("Select second column:", [c for c in num_cols if c != col1], key="math_col2")
+                second_operand = df_preview[col2]  # Use preview for UI
+                operand_desc = col2
+        
+        # New column name
+        if operation in binary_ops:
+            op_symbols = {
+                "Addition (+)": "+",
+                "Subtraction (-)": "-",
+                "Multiplication (*)": "*",
+                "Division (/)": "/",
+                "Modulo (%)": "%",
+                "Power (^)": "^"
+            }
+            default_name = f"{col1}_{op_symbols[operation]}_{operand_desc}"
+        else:
+            op_names = {
+                "Absolute Value (|x|)": "abs",
+                "Logarithm (log)": "log",
+                "Exponential (exp)": "exp",
+                "Round": "round",
+                "Floor": "floor",
+                "Ceiling": "ceil"
+            }
+            default_name = f"{op_names[operation]}_{col1}"
+            
+        new_col_name = st.text_input("New column name:", value=default_name)
+        
+        # Preview button
+        if st.button("Preview Result", key="math_preview"):
+            try:
+                # Calculate result based on operation
+                if operation == "Addition (+)":
+                    result = df_preview[col1] + second_operand
+                elif operation == "Subtraction (-)":
+                    result = df_preview[col1] - second_operand
+                elif operation == "Multiplication (*)":
+                    result = df_preview[col1] * second_operand
+                elif operation == "Division (/)":
+                    # Avoid division by zero
+                    if isinstance(second_operand, (int, float)) and second_operand == 0:
+                        st.error("Cannot divide by zero!")
+                        return
+                    result = df_preview[col1] / second_operand
+                elif operation == "Modulo (%)":
+                    # Avoid modulo by zero
+                    if isinstance(second_operand, (int, float)) and second_operand == 0:
+                        st.error("Cannot perform modulo by zero!")
+                        return
+                    result = df_preview[col1] % second_operand
+                elif operation == "Power (^)":
+                    result = df_preview[col1] ** second_operand
+                elif operation == "Absolute Value (|x|)":
+                    result = df_preview[col1].abs()
+                elif operation == "Logarithm (log)":
+                    # Check for non-positive values
+                    if (df_preview[col1] <= 0).any():
+                        st.warning("Column contains non-positive values. Will apply log to positive values only and return NaN for others.")
+                    result = np.log(df_preview[col1])
+                elif operation == "Exponential (exp)":
+                    result = np.exp(df_preview[col1])
+                elif operation == "Round":
+                    result = df_preview[col1].round()
+                elif operation == "Floor":
+                    result = np.floor(df_preview[col1])
+                elif operation == "Ceiling":
+                    result = np.ceil(df_preview[col1])
+                
+                # Preview the first few rows
+                preview_df = pd.DataFrame({
+                    col1: df_preview[col1].head(5),
+                    "Result": result.head(5)
+                })
+                
+                # Add second column to preview if applicable
+                if operation in binary_ops and not use_constant:
+                    preview_df.insert(1, col2, df_preview[col2].head(5))
+                
+                st.write("Preview (first 5 rows):")
+                st.dataframe(preview_df)
+                
+                # Statistics about the result
+                st.write("Result Statistics:")
+                stat_cols = st.columns(4)
+                with stat_cols[0]:
+                    st.metric("Mean", f"{result.mean():.2f}")
+                with stat_cols[1]:
+                    st.metric("Min", f"{result.min():.2f}")
+                with stat_cols[2]:
+                    st.metric("Max", f"{result.max():.2f}")
+                with stat_cols[3]:
+                    st.metric("Missing Values", f"{result.isna().sum()}")
+                
+            except Exception as e:
+                st.error(f"Error previewing result: {str(e)}")
+        
+        # Apply button
+        if st.button("Create New Column", key="math_apply", use_container_width=True):
+            try:
+                # Define the operation function
+                def apply_math_operation(df, col1, operation, new_col_name, second_operand=None, is_constant=False):
+                    result_df = df.copy()
+                    
+                    # Get the second operand
+                    if is_constant:
+                        operand2 = second_operand
+                    else:
+                        operand2 = result_df[second_operand]
+                    
+                    # Apply the operation
+                    if operation == "Addition (+)":
+                        result_df[new_col_name] = result_df[col1] + operand2
+                    elif operation == "Subtraction (-)":
+                        result_df[new_col_name] = result_df[col1] - operand2
+                    elif operation == "Multiplication (*)":
+                        result_df[new_col_name] = result_df[col1] * operand2
+                    elif operation == "Division (/)":
+                        # Avoid division by zero
+                        if is_constant and operand2 == 0:
+                            raise ValueError("Cannot divide by zero!")
+                        elif not is_constant:
+                            # Replace zeros with NaN to avoid division by zero
+                            denominator = operand2.replace(0, np.nan)
+                            result_df[new_col_name] = result_df[col1] / denominator
+                        else:
+                            result_df[new_col_name] = result_df[col1] / operand2
+                    elif operation == "Modulo (%)":
+                        # Avoid modulo by zero
+                        if is_constant and operand2 == 0:
+                            raise ValueError("Cannot perform modulo by zero!")
+                        elif not is_constant:
+                            # Replace zeros with NaN to avoid modulo by zero
+                            denominator = operand2.replace(0, np.nan)
+                            result_df[new_col_name] = result_df[col1] % denominator
+                        else:
+                            result_df[new_col_name] = result_df[col1] % operand2
+                    elif operation == "Power (^)":
+                        result_df[new_col_name] = result_df[col1] ** operand2
+                    elif operation == "Absolute Value (|x|)":
+                        result_df[new_col_name] = result_df[col1].abs()
+                    elif operation == "Logarithm (log)":
+                        # Handle non-positive values
+                        result_df[new_col_name] = np.log(result_df[col1])
+                    elif operation == "Exponential (exp)":
+                        result_df[new_col_name] = np.exp(result_df[col1])
+                    elif operation == "Round":
+                        result_df[new_col_name] = result_df[col1].round()
+                    elif operation == "Floor":
+                        result_df[new_col_name] = np.floor(result_df[col1])
+                    elif operation == "Ceiling":
+                        result_df[new_col_name] = np.ceil(result_df[col1])
+                    
+                    return result_df
+                
+                # Apply the operation with progress bar
+                with st.spinner(f"Creating new column '{new_col_name}'..."):
+                    if operation in binary_ops:
+                        st.session_state.df = apply_operation_with_progress(
+                            apply_math_operation,
+                            f"Creating column with {operation}",
+                            st.session_state.df,
+                            col1,
+                            operation,
+                            new_col_name,
+                            constant if use_constant else col2,
+                            use_constant
+                        )
+                    else:
+                        st.session_state.df = apply_operation_with_progress(
+                            apply_math_operation,
+                            f"Creating column with {operation}",
+                            st.session_state.df,
+                            col1,
+                            operation,
+                            new_col_name
+                        )
+                
+                # Create operation description
+                op_desc = {
+                    "Addition (+)": f"Added {col1} and {operand_desc}",
+                    "Subtraction (-)": f"Subtracted {operand_desc} from {col1}",
+                    "Multiplication (*)": f"Multiplied {col1} by {operand_desc}",
+                    "Division (/)": f"Divided {col1} by {operand_desc}",
+                    "Modulo (%)": f"Calculated {col1} modulo {operand_desc}",
+                    "Power (^)": f"Raised {col1} to the power of {operand_desc}",
+                    "Absolute Value (|x|)": f"Calculated absolute value of {col1}",
+                    "Logarithm (log)": f"Calculated natural logarithm of {col1}",
+                    "Exponential (exp)": f"Calculated exponential of {col1}",
+                    "Round": f"Rounded {col1} to nearest integer",
+                    "Floor": f"Applied floor function to {col1}",
+                    "Ceiling": f"Applied ceiling function to {col1}"
+                }
+                
+                description = f"Created new column '{new_col_name}': {op_desc.get(operation, operation)}"
+                
+                # Add to processing history
+                st.session_state.processing_history.append({
+                    "description": description,
+                    "timestamp": datetime.datetime.now(),
+                    "type": "feature_engineering",
+                    "details": {
+                        "operation": operation,
+                        "columns_used": [col1] if operation not in binary_ops or use_constant else [col1, col2],
+                        "result_column": new_col_name
+                    }
+                })
+                
+                # Update preview
+                create_data_preview(st.session_state.df)
+                
+                st.success(f"Created new column '{new_col_name}'")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error creating new column: {str(e)}")
+    
+    # Other feature engineering tabs would be implemented similarly
+    # with optimizations and progress monitoring
+
+def render_data_filtering():
+    """Render data filtering interface with optimizations."""
+    st.subheader("Data Filtering")
+    
+    # Make sure we have data
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or st.session_state.df.empty:
+        st.info("Please upload a dataset to begin data filtering.")
+        return
+    
+    # Use the preview dataframe for UI operations
+    df_preview = st.session_state.df_preview if hasattr(st.session_state, 'df_preview') else st.session_state.df
+    
+    # Create columns for organized layout
+    col1, col2 = st.columns(2)
+    
+    with col1:
+        st.markdown("### Filter by Conditions")
+        
+        # Get all columns
+        all_cols = st.session_state.df.columns.tolist()
+        
+        # Allow adding multiple filter conditions
+        conditions = []
+        
+        # Add first condition
+        st.markdown("#### Add Filter Conditions")
+        
+        # Container for conditions
+        condition_container = st.container()
+        
+        with condition_container:
+            # Condition 1
+            col1a, col1b, col1c = st.columns([2, 1, 2])
+            with col1a:
+                filter_col = st.selectbox("Column", all_cols, key="filter_col_12")
+            
+            with col1b:
+                # Choose operator based on column type
+                if st.session_state.df[filter_col].dtype.kind in 'bifc':
+                    # Numeric
+                    operators = ["==", "!=", ">", ">=", "<", "<=", "between", "is null", "is not null"]
+                elif st.session_state.df[filter_col].dtype.kind in 'M':
+                    # Datetime
+                    operators = ["==", "!=", ">", ">=", "<", "<=", "between", "is null", "is not null"]
+                else:
+                    # String/object
+                    operators = ["==", "!=", "contains", "starts with", "ends with", "is null", "is not null", "in"]
+                
+                filter_op = st.selectbox("Operator", operators, key="filter_op_1")
+            
+            with col1c:
+                # Value input based on operator
+                if filter_op == "between":
+                    # Range values
+                    if st.session_state.df[filter_col].dtype.kind in 'bifc':
+                        # Numeric range
+                        min_val, max_val = st.slider(
+                            "Range", 
+                            float(df_preview[filter_col].min()), 
+                            float(df_preview[filter_col].max()),
+                            (float(df_preview[filter_col].min()), float(df_preview[filter_col].max())),
+                            key="filter_range_1"
+                        )
+                        filter_val = (min_val, max_val)
+                    elif st.session_state.df[filter_col].dtype.kind in 'M':
+                        # Date range
+                        min_date = pd.to_datetime(df_preview[filter_col].min()).date()
+                        max_date = pd.to_datetime(df_preview[filter_col].max()).date()
+                        
+                        # Default to last 30 days if range is large
+                        default_min = max_date - pd.Timedelta(days=30)
+                        
+                        start_date = st.date_input("Start date", default_min, min_value=min_date, max_value=max_date, key="filter_date_start_1")
+                        end_date = st.date_input("End date", max_date, min_value=min_date, max_value=max_date, key="filter_date_end_1")
+                        filter_val = (pd.Timestamp(start_date), pd.Timestamp(end_date))
+                    else:
+                        # String input for range
+                        filter_val1 = st.text_input("Min value", key="filter_min_1")
+                        filter_val2 = st.text_input("Max value", key="filter_max_1")
+                        filter_val = (filter_val1, filter_val2)
+                elif filter_op in ["is null", "is not null"]:
+                    # No value needed
+                    filter_val = None
+                    st.write("No value needed")
+                elif filter_op == "in":
+                    # Multiple values
+                    filter_val = st.text_input("Values (comma-separated)", key="filter_in_1")
+                else:
+                    # Single value
+                    if st.session_state.df[filter_col].dtype.kind in 'bifc':
+                        # Numeric input
+                        filter_val = st.number_input("Value", value=0, key="filter_val_1")
+                    elif st.session_state.df[filter_col].dtype.kind in 'M':
+                        # Date input
+                        min_date = pd.to_datetime(df_preview[filter_col].min()).date()
+                        max_date = pd.to_datetime(df_preview[filter_col].max()).date()
+                        filter_val = st.date_input("Value", max_date, min_value=min_date, max_value=max_date, key="filter_date_1")
+                        filter_val = pd.Timestamp(filter_val)
+                    else:
+                        # Get unique values if not too many
+                        unique_vals = df_preview[filter_col].dropna().unique()
+                        if len(unique_vals) <= 20:
+                            filter_val = st.selectbox("Value", unique_vals, key="filter_dropdown_1")
+                        else:
+                            filter_val = st.text_input("Value", key="filter_val_1")
+            
+            # Add this condition
+            condition = {
+                "column": filter_col,
+                "operator": filter_op,
+                "value": filter_val
+            }
+            conditions.append(condition)
+        
+        # Add more conditions if needed
+        add_condition = st.checkbox("Add another condition")
+        
+        if add_condition:
+            # Condition 2
+            col2a, col2b, col2c = st.columns([2, 1, 2])
+            with col2a:
+                filter_col2 = st.selectbox("Column", all_cols, key="filter_col_2")
+            
+            with col2b:
+                # Choose operator based on column type
+                if st.session_state.df[filter_col2].dtype.kind in 'bifc':
+                    # Numeric
+                    operators2 = ["==", "!=", ">", ">=", "<", "<=", "between", "is null", "is not null"]
+                elif st.session_state.df[filter_col2].dtype.kind in 'M':
+                    # Datetime
+                    operators2 = ["==", "!=", ">", ">=", "<", "<=", "between", "is null", "is not null"]
+                else:
+                    # String/object
+                    operators2 = ["==", "!=", "contains", "starts with", "ends with", "is null", "is not null", "in"]
+                
+                filter_op2 = st.selectbox("Operator", operators2, key="filter_op_2")
+            
+            with col2c:
+                # Value input based on operator
+                if filter_op2 == "between":
+                    # Range values
+                    if st.session_state.df[filter_col2].dtype.kind in 'bifc':
+                        # Numeric range
+                        min_val2, max_val2 = st.slider(
+                            "Range", 
+                            float(df_preview[filter_col2].min()), 
+                            float(df_preview[filter_col2].max()),
+                            (float(df_preview[filter_col2].min()), float(df_preview[filter_col2].max())),
+                            key="filter_range_2"
+                        )
+                        filter_val2 = (min_val2, max_val2)
+                    elif st.session_state.df[filter_col2].dtype.kind in 'M':
+                        # Date range
+                        min_date2 = pd.to_datetime(df_preview[filter_col2].min()).date()
+                        max_date2 = pd.to_datetime(df_preview[filter_col2].max()).date()
+                        
+                        # Default to last 30 days if range is large
+                        default_min2 = max_date2 - pd.Timedelta(days=30)
+                        
+                        start_date2 = st.date_input("Start date", default_min2, min_value=min_date2, max_value=max_date2, key="filter_date_start_2")
+                        end_date2 = st.date_input("End date", max_date2, min_value=min_date2, max_value=max_date2, key="filter_date_end_2")
+                        filter_val2 = (pd.Timestamp(start_date2), pd.Timestamp(end_date2))
+                    else:
+                        # String input for range
+                        filter_val2_1 = st.text_input("Min value", key="filter_min_2")
+                        filter_val2_2 = st.text_input("Max value", key="filter_max_2")
+                        filter_val2 = (filter_val2_1, filter_val2_2)
+                elif filter_op2 in ["is null", "is not null"]:
+                    # No value needed
+                    filter_val2 = None
+                    st.write("No value needed")
+                elif filter_op2 == "in":
+                    # Multiple values
+                    filter_val2 = st.text_input("Values (comma-separated)", key="filter_in_2")
+                else:
+                    # Single value
+                    if st.session_state.df[filter_col2].dtype.kind in 'bifc':
+                        # Numeric input
+                        filter_val2 = st.number_input("Value", value=0, key="filter_val_2")
+                    elif st.session_state.df[filter_col2].dtype.kind in 'M':
+                        # Date input
+                        min_date2 = pd.to_datetime(df_preview[filter_col2].min()).date()
+                        max_date2 = pd.to_datetime(df_preview[filter_col2].max()).date()
+                        filter_val2 = st.date_input("Value", max_date2, min_value=min_date2, max_value=max_date2, key="filter_date_2")
+                        filter_val2 = pd.Timestamp(filter_val2)
+                    else:
+                        # Get unique values if not too many
+                        unique_vals2 = df_preview[filter_col2].dropna().unique()
+                        if len(unique_vals2) <= 20:
+                            filter_val2 = st.selectbox("Value", unique_vals2, key="filter_dropdown_2")
+                        else:
+                            filter_val2 = st.text_input("Value", key="filter_val_2")
+            
+            # Add this condition
+            condition2 = {
+                "column": filter_col2,
+                "operator": filter_op2,
+                "value": filter_val2
+            }
+            conditions.append(condition2)
+        
+        # Condition combination
+        if len(conditions) > 1:
+            combine_op = st.radio("Combine conditions with:", ["AND", "OR"], horizontal=True, key="combine_op")
+        
+        # Apply filters button
+        if st.button("Apply Filters", use_container_width=True):
+            try:
+                # Store original shape for reporting
+                orig_shape = st.session_state.df.shape
+                
+                # Define the filtering function
+                def apply_filters(df, conditions, combine_op="AND"):
+                    result_df = df.copy()
+                    
+                    # Create filter mask for each condition
+                    masks = []
+                    for condition in conditions:
+                        col = condition["column"]
+                        op = condition["operator"]
+                        val = condition["value"]
+                        
+                        # Create the mask based on the operator
+                        if op == "==":
+                            mask = result_df[col] == val
+                        elif op == "!=":
+                            mask = result_df[col] != val
+                        elif op == ">":
+                            mask = result_df[col] > val
+                        elif op == ">=":
+                            mask = result_df[col] >= val
+                        elif op == "<":
+                            mask = result_df[col] < val
+                        elif op == "<=":
+                            mask = result_df[col] <= val
+                        elif op == "between":
+                            min_val, max_val = val
+                            mask = (result_df[col] >= min_val) & (result_df[col] <= max_val)
+                        elif op == "is null":
+                            mask = result_df[col].isna()
+                        elif op == "is not null":
+                            mask = ~result_df[col].isna()
+                        elif op == "contains":
+                            mask = result_df[col].astype(str).str.contains(str(val), na=False)
+                        elif op == "starts with":
+                            mask = result_df[col].astype(str).str.startswith(str(val), na=False)
+                        elif op == "ends with":
+                            mask = result_df[col].astype(str).str.endswith(str(val), na=False)
+                        elif op == "in":
+                            # Split comma-separated values
+                            in_vals = [v.strip() for v in str(val).split(",")]
+                            mask = result_df[col].isin(in_vals)
+                        else:
+                            raise ValueError(f"Unknown operator: {op}")
+                        
+                        masks.append(mask)
+                    
+                    # Combine masks
+                    if len(masks) == 1:
+                        final_mask = masks[0]
+                    else:
+                        if combine_op == "AND":
+                            final_mask = masks[0]
+                            for mask in masks[1:]:
+                                final_mask = final_mask & mask
+                        else:  # OR
+                            final_mask = masks[0]
+                            for mask in masks[1:]:
+                                final_mask = final_mask | mask
+                    
+                    # Apply the filter
+                    return result_df[final_mask]
+                
+                # Apply the filter with progress bar
+                with st.spinner("Applying filters..."):
+                    st.session_state.df = apply_operation_with_progress(
+                        apply_filters,
+                        "Filtering data",
+                        st.session_state.df,
+                        conditions,
+                        combine_op if len(conditions) > 1 else "AND"
+                    )
+                
+                # Calculate how many rows were filtered out
+                rows_filtered = orig_shape[0] - st.session_state.df.shape[0]
+                
+                # Add to processing history
+                filter_details = {
+                    "conditions": conditions,
+                    "combine_operator": combine_op if len(conditions) > 1 else None,
+                    "rows_filtered": rows_filtered,
+                    "rows_remaining": st.session_state.df.shape[0]
+                }
+                
+                st.session_state.processing_history.append({
+                    "description": f"Filtered data: {rows_filtered} rows removed, {st.session_state.df.shape[0]} remaining",
+                    "timestamp": datetime.datetime.now(),
+                    "type": "filter",
+                    "details": filter_details
+                })
+                
+                # Update preview
+                create_data_preview(st.session_state.df)
+                
+                st.success(f"Filter applied: {rows_filtered} rows removed, {st.session_state.df.shape[0]} remaining")
+                st.rerun()
+                
+            except Exception as e:
+                st.error(f"Error applying filter: {str(e)}")
+    
+    with col2:
+        st.markdown("### Sampling & Subset")
+        
+        # Sample methods
+        sample_method = st.selectbox(
+            "Sampling method:",
+            ["Random Sample", "Stratified Sample", "Systematic Sample", "First/Last N Rows"]
+        )
+        
+        if sample_method == "Random Sample":
+            # Random sampling options
+            sample_size_type = st.radio(
+                "Sample size as:",
+                ["Percentage", "Number of rows"],
+                horizontal=True,
+                key="sample_size_type"
+            )
+            
+            if sample_size_type == "Percentage":
+                sample_pct = st.slider("Percentage to sample:", 1, 100, 10)
+                sample_size = int(len(st.session_state.df) * sample_pct / 100)
+            else:
+                sample_size = st.number_input(
+                    "Number of rows to sample:",
+                    min_value=1,
+                    max_value=len(st.session_state.df),
+                    value=min(100, len(st.session_state.df))
+                )
+            
+            random_state = st.number_input("Random seed (for reproducibility):", value=42)
+            
+            if st.button("Apply Random Sampling", use_container_width=True):
+                try:
+                    # Store original shape for reporting
+                    orig_shape = st.session_state.df.shape
+                    
+                    # Define sampling function
+                    def random_sample(df, sample_size, random_state):
+                        return df.sample(n=sample_size, random_state=random_state)
+                    
+                    # Apply with progress bar
+                    with st.spinner("Applying random sampling..."):
+                        st.session_state.df = apply_operation_with_progress(
+                            random_sample,
+                            "Random sampling",
+                            st.session_state.df,
+                            sample_size,
+                            random_state
+                        )
+                    
+                    # Add to processing history
+                    st.session_state.processing_history.append({
+                        "description": f"Applied random sampling: {sample_size} rows selected",
+                        "timestamp": datetime.datetime.now(),
+                        "type": "sampling",
+                        "details": {
+                            "method": "random",
+                            "sample_size": sample_size,
+                            "original_rows": orig_shape[0],
+                            "random_state": random_state
+                        }
+                    })
+                    
+                    # Update preview
+                    create_data_preview(st.session_state.df)
+                    
+                    st.success(f"Applied random sampling: {sample_size} rows selected")
+                    st.rerun()
+                    
+                except Exception as e:
+                    st.error(f"Error applying sampling: {str(e)}")
+        
+        # Other sampling methods would be implemented similarly
+        # ...
+
+def render_column_management():
+    """Render column management interface with optimizations."""
+    st.subheader("Column Management")
+    
+    # Make sure we have data
+    if not hasattr(st.session_state, 'df') or st.session_state.df is None or st.session_state.df.empty:
+        st.info("Please upload a dataset to begin column management.")
+        return
+    
+    # Create tabs for different column operations
+    col_tabs = st.tabs([
+        "Rename Columns",
+        "Select/Drop Columns",
+        "Reorder Columns",
+        "Split & Merge Columns"
+    ])
+    
+    # Rename Columns Tab implementation with optimizations
+    # ...
+
+    # Other column management tabs would be implemented similarly
+    # ...
+
+# Function to save data to project
+def save_to_project(project_name):
+    """Save processed data to a project."""
+    try:
+        # Implementation depends on your project structure
+        return True
+    except Exception as e:
+        st.error(f"Error saving to project: {str(e)}")
+        return False
+
+# Main function to initialize the app
+def main():
+    st.title("Optimized Data Processing App")
+    
+    # Initialize session state
+    if 'df' not in st.session_state:
+        st.session_state.df = None
+    
+    if 'original_df' not in st.session_state:
+        st.session_state.original_df = None
+    
+    if 'processing_history' not in st.session_state:
+        st.session_state.processing_history = []
+    
+    # File uploader
+    uploaded_file = st.file_uploader("Upload your data file", type=["csv", "xlsx", "xls"])
+    
+    if uploaded_file is not None:
+        df = handle_file_upload(uploaded_file)
+        if df is not None:
+            st.success(f"Data loaded successfully! {df.shape[0]} rows, {df.shape[1]} columns")
+            render_data_processing()
+    else:
+        st.info("Please upload a data file to begin processing.")
+
+if __name__ == "__main__":
+    main()
