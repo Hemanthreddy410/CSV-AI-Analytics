@@ -1,613 +1,3 @@
-# import streamlit as st
-# import pandas as pd
-# import numpy as np
-# import json
-# import os
-# import requests
-# import time
-# import re
-# import matplotlib.pyplot as plt
-# import plotly.express as px
-# import plotly.graph_objects as go
-# from io import StringIO
-
-# class GenAIAssistant:
-#     """Generative AI powered data analysis assistant"""
-    
-#     def __init__(self, df):
-#         """Initialize with dataframe"""
-#         self.df = df
-        
-#         # Store chat history in session state if not already there
-#         if 'genai_chat_history' not in st.session_state:
-#             st.session_state.genai_chat_history = []
-        
-#         # Store API key
-#         if 'openai_api_key' not in st.session_state:
-#             st.session_state.openai_api_key = ""
-            
-#         # Store latest generated code
-#         if 'latest_code' not in st.session_state:
-#             st.session_state.latest_code = None
-
-#     def render_interface(self):
-#         """Render the GenAI assistant interface"""
-#         st.header("💡 GenAI Data Assistant")
-        
-#         # Setup tab or direct interface
-#         tab1, tab2, tab3, tab4 = st.tabs([
-#             "💬 Chat Analysis", 
-#             "📊 Smart Insights", 
-#             "👨‍💻 Code Generation",
-#             "⚙️ Settings"
-#         ])
-        
-#         # Chat with Data tab
-#         with tab1:
-#             self._render_chat_interface()
-        
-#         # Smart Insights tab
-#         with tab2:
-#             self._render_insights_interface()
-            
-#         # Code Generation tab
-#         with tab3:
-#             self._render_code_generation()
-            
-#         # Settings tab
-#         with tab4:
-#             self._render_settings()
-    
-#     def _render_settings(self):
-#         """Render settings interface"""
-#         st.subheader("API Settings")
-        
-#         with st.form("api_settings"):
-#             api_key = st.text_input(
-#                 "OpenAI API Key", 
-#                 value=st.session_state.openai_api_key,
-#                 type="password",
-#                 help="Enter your OpenAI API key. Get one at https://platform.openai.com/api-keys"
-#             )
-            
-#             model = st.selectbox(
-#                 "Model",
-#                 options=["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-#                 index=2,
-#                 help="Select the OpenAI model to use"
-#             )
-            
-#             col1, col2 = st.columns(2)
-#             with col1:
-#                 temperature = st.slider("Temperature", 0.0, 1.0, 0.7, 0.1, 
-#                                      help="Higher values make output more creative, lower values more deterministic")
-#             with col2:
-#                 max_tokens = st.slider("Max Response Length", 250, 4000, 1500, 50,
-#                                        help="Maximum length of AI responses")
-                
-#             # Submit button
-#             if st.form_submit_button("Save Settings"):
-#                 st.session_state.openai_api_key = api_key
-#                 st.session_state.openai_model = model
-#                 st.session_state.openai_temperature = temperature
-#                 st.session_state.openai_max_tokens = max_tokens
-#                 st.success("Settings saved successfully!")
-        
-#         # Clear chat history button
-#         if st.button("Clear Chat History"):
-#             st.session_state.genai_chat_history = []
-#             st.success("Chat history cleared!")
-#             st.rerun()
-    
-#     def _render_chat_interface(self):
-#         """Render chat interface for natural language data analysis"""
-        
-#         # Check if API key is set
-#         if not st.session_state.openai_api_key:
-#             st.warning("Please set your OpenAI API key in the Settings tab to use this feature.")
-#             return
-        
-#         # Check if data is available
-#         if self.df is None or self.df.empty:
-#             st.warning("Please upload a dataset first to use this feature.")
-#             return
-            
-#         st.subheader("Chat with your Data")
-#         st.markdown("Ask questions about your data in natural language")
-        
-#         # Display chat history
-#         self._display_chat_history()
-        
-#         # Chat input
-#         with st.form("chat_input_form", clear_on_submit=True):
-#             user_input = st.text_area("Ask a question about your data:", key="genai_chat_input", height=100)
-#             col1, col2 = st.columns([4, 1])
-            
-#             with col1:
-#                 sample_questions = [
-#                     "What are the key patterns in this dataset?",
-#                     "Analyze the relationship between [column X] and [column Y]",
-#                     "What interesting insights can you find in this data?",
-#                     "Suggest visualizations that would work well for this data",
-#                     "What potential data quality issues do you see?",
-#                 ]
-#                 selected_sample = st.selectbox("Example questions:", [""] + sample_questions)
-                
-#             with col2:
-#                 submit_button = st.form_submit_button("Submit", use_container_width=True)
-        
-#         # Process selected sample question or user input
-#         if selected_sample and selected_sample != "":
-#             user_input = selected_sample
-        
-#         if submit_button and user_input:
-#             # Add user message to chat history
-#             st.session_state.genai_chat_history.append({
-#                 "role": "user",
-#                 "content": user_input
-#             })
-            
-#             # Get AI response
-#             with st.spinner("Analyzing data and generating response..."):
-#                 response = self._generate_chat_response(user_input)
-                
-#             # Add AI response to chat history
-#             st.session_state.genai_chat_history.append({
-#                 "role": "assistant",
-#                 "content": response
-#             })
-            
-#             # Refresh the UI
-#             st.rerun()
-    
-#     def _display_chat_history(self):
-#         """Display the chat conversation history"""
-#         if not st.session_state.genai_chat_history:
-#             st.info("Ask me questions about your data in natural language. I'll analyze and provide insights!")
-#             return
-        
-#         # Container for the entire chat history
-#         chat_container = st.container()
-        
-#         with chat_container:
-#             for message in st.session_state.genai_chat_history:
-#                 if message["role"] == "user":
-#                     with st.chat_message("user", avatar="👤"):
-#                         st.write(message["content"])
-#                 else:
-#                     with st.chat_message("assistant", avatar="🤖"):
-#                         # Check if this is a markdown response with potential code blocks
-#                         if "```python" in message["content"] or "```" in message["content"]:
-#                             # Split by code blocks and render appropriately
-#                             parts = re.split(r'(```(?:python)?\n[\s\S]*?\n```)', message["content"])
-#                             for part in parts:
-#                                 if part.startswith("```"):
-#                                     # This is a code block - extract the code
-#                                     code = re.search(r'```(?:python)?\n([\s\S]*?)\n```', part).group(1)
-#                                     st.code(code, language="python")
-#                                 else:
-#                                     # This is regular text
-#                                     st.write(part)
-#                         else:
-#                             # Regular text
-#                             st.write(message["content"])
-    
-#     def _generate_chat_response(self, user_query):
-#         """Generate AI response to user query about the data"""
-#         # Verify API key
-#         if not st.session_state.openai_api_key:
-#             return "Please set your OpenAI API key in the Settings tab."
-        
-#         # Get dataframe info
-#         df_info = self._get_dataframe_info()
-        
-#         # Create system prompt
-#         system_prompt = f"""You are an advanced data analysis assistant that helps users analyze and understand their data.
-        
-# The user has uploaded a dataset with the following characteristics:
-# {df_info}
-
-# Your task is to provide insightful analysis and answer questions about this data.
-# Make your responses clear, informative and actionable. Use markdown formatting for clarity.
-# If appropriate, suggest Python code that could be used to further analyze or visualize the data.
-# """
-
-#         try:
-#             # Prepare the messages
-#             messages = [
-#                 {"role": "system", "content": system_prompt},
-#             ]
-            
-#             # Add chat history (up to last 6 messages to stay within token limits)
-#             for message in st.session_state.genai_chat_history[-6:]:
-#                 messages.append({"role": message["role"], "content": message["content"]})
-            
-#             # Add the current query if it's not already in the history
-#             if not st.session_state.genai_chat_history or st.session_state.genai_chat_history[-1]["content"] != user_query:
-#                 messages.append({"role": "user", "content": user_query})
-            
-#             # Get model parameters
-#             model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-#             temperature = getattr(st.session_state, 'openai_temperature', 0.7)
-#             max_tokens = getattr(st.session_state, 'openai_max_tokens', 1500)
-            
-#             # Make API call
-#             url = "https://api.openai.com/v1/chat/completions"
-#             headers = {
-#                 "Authorization": f"Bearer {st.session_state.openai_api_key}",
-#                 "Content-Type": "application/json"
-#             }
-#             payload = {
-#                 "model": model,
-#                 "messages": messages,
-#                 "temperature": temperature,
-#                 "max_tokens": max_tokens
-#             }
-            
-#             response = requests.post(url, headers=headers, json=payload)
-            
-#             if response.status_code == 200:
-#                 return response.json()["choices"][0]["message"]["content"]
-#             else:
-#                 error_message = f"Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-#                 return error_message
-                
-#         except Exception as e:
-#             return f"Sorry, an error occurred while generating the response: {str(e)}"
-    
-#     def _get_dataframe_info(self):
-#         """Get information about the dataframe for context"""
-#         # Basic stats
-#         info = []
-#         info.append(f"- Dimensions: {self.df.shape[0]} rows, {self.df.shape[1]} columns")
-        
-#         # Column names and types
-#         info.append("- Columns:")
-#         for col in self.df.columns:
-#             dtype = self.df[col].dtype
-#             unique = self.df[col].nunique()
-#             missing = self.df[col].isna().sum()
-#             missing_pct = (missing / len(self.df)) * 100
-            
-#             # Add column info
-#             if missing_pct > 0:
-#                 info.append(f"  - {col}: {dtype} ({unique} unique values, {missing_pct:.1f}% missing)")
-#             else:
-#                 info.append(f"  - {col}: {dtype} ({unique} unique values)")
-        
-#         # Sample data (first 5 rows in CSV format)
-#         sample_data = self.df.head(5).to_csv(index=False)
-#         info.append("\n- Sample Data (first 5 rows):")
-#         info.append("```")
-#         info.append(sample_data)
-#         info.append("```")
-        
-#         # Add summary statistics for numeric columns
-#         numeric_cols = self.df.select_dtypes(include=['number']).columns.tolist()
-#         if numeric_cols:
-#             info.append("\n- Summary Statistics (numeric columns):")
-#             stats_df = self.df[numeric_cols].describe().to_string()
-#             info.append("```")
-#             info.append(stats_df)
-#             info.append("```")
-            
-#         return "\n".join(info)
-    
-#     def _render_insights_interface(self):
-#         """Render automated insights generation interface"""
-        
-#         # Check if API key is set
-#         if not st.session_state.openai_api_key:
-#             st.warning("Please set your OpenAI API key in the Settings tab to use this feature.")
-#             return
-        
-#         # Check if data is available
-#         if self.df is None or self.df.empty:
-#             st.warning("Please upload a dataset first to use this feature.")
-#             return
-            
-#         st.subheader("Smart Insights Generator")
-#         st.markdown("Automatically generate key insights from your data")
-        
-#         # Insight generation options
-#         insight_type = st.selectbox(
-#             "Select insight type:",
-#             options=[
-#                 "General Overview",
-#                 "Data Quality Assessment",
-#                 "Patterns & Correlations",
-#                 "Key Metrics Summary",
-#                 "Actionable Recommendations"
-#             ]
-#         )
-        
-#         # Extra context
-#         extra_context = st.text_area(
-#             "Additional context (optional):",
-#             placeholder="Add any specific information or focus areas you'd like insights on...",
-#             help="Provide additional context about your data or specific aspects you're interested in"
-#         )
-        
-#         # Generate insights button
-#         if st.button("Generate Insights", type="primary", use_container_width=True):
-#             with st.spinner("Analyzing data and generating insights..."):
-#                 insights = self._generate_insights(insight_type, extra_context)
-                
-#             # Display insights in a nice format
-#             st.success("✅ Insights generated successfully!")
-            
-#             with st.expander("Generated Insights", expanded=True):
-#                 st.markdown(insights)
-                
-#                 # Add download option
-#                 timestamp = int(time.time())
-#                 filename = f"{insight_type.lower().replace(' ', '_')}_{timestamp}.md"
-                
-#                 st.download_button(
-#                     label="Download Insights",
-#                     data=insights,
-#                     file_name=filename,
-#                     mime="text/markdown",
-#                     use_container_width=True
-#                 )
-    
-#     def _generate_insights(self, insight_type, extra_context=""):
-#         """Generate automated insights based on the data"""
-#         # Verify API key
-#         if not st.session_state.openai_api_key:
-#             return "Please set your OpenAI API key in the Settings tab."
-        
-#         # Get dataframe info
-#         df_info = self._get_dataframe_info()
-        
-#         # Create prompt based on insight type
-#         if insight_type == "General Overview":
-#             prompt = "Provide a comprehensive overview of this dataset. Include key statistics, notable patterns, and overall insights."
-#         elif insight_type == "Data Quality Assessment":
-#             prompt = "Assess the quality of this dataset. Identify missing values, outliers, inconsistencies, and other data quality issues."
-#         elif insight_type == "Patterns & Correlations":
-#             prompt = "Identify key patterns, correlations, and relationships between variables in this dataset."
-#         elif insight_type == "Key Metrics Summary":
-#             prompt = "Summarize the key metrics and KPIs from this dataset. Highlight the most important numbers and trends."
-#         elif insight_type == "Actionable Recommendations":
-#             prompt = "Based on this data, provide actionable recommendations and next steps for analysis or business decisions."
-#         else:
-#             prompt = "Analyze this dataset and provide key insights."
-            
-#         # Add extra context if provided
-#         if extra_context:
-#             prompt += f"\n\nAdditional context: {extra_context}"
-        
-#         # Create system prompt
-#         system_prompt = f"""You are an advanced data analysis assistant that generates insightful reports.
-
-# The user has uploaded a dataset with the following characteristics:
-# {df_info}
-
-# Your task is to create a well-structured, comprehensive {insight_type} report.
-# Format your response in Markdown with clear sections, bullet points, and emphasis where appropriate.
-# Include specific details and numbers from the dataset to support your insights.
-# Be thorough yet concise, focusing on actionable information.
-# """
-
-#         try:
-#             # Make API call
-#             url = "https://api.openai.com/v1/chat/completions"
-#             headers = {
-#                 "Authorization": f"Bearer {st.session_state.openai_api_key}",
-#                 "Content-Type": "application/json"
-#             }
-            
-#             # Get model parameters
-#             model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-#             temperature = getattr(st.session_state, 'openai_temperature', 0.7)
-#             max_tokens = getattr(st.session_state, 'openai_max_tokens', 1500)
-            
-#             payload = {
-#                 "model": model,
-#                 "messages": [
-#                     {"role": "system", "content": system_prompt},
-#                     {"role": "user", "content": prompt}
-#                 ],
-#                 "temperature": temperature,
-#                 "max_tokens": max_tokens
-#             }
-            
-#             response = requests.post(url, headers=headers, json=payload)
-            
-#             if response.status_code == 200:
-#                 return response.json()["choices"][0]["message"]["content"]
-#             else:
-#                 error_message = f"Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-#                 return error_message
-                
-#         except Exception as e:
-#             return f"Sorry, an error occurred while generating insights: {str(e)}"
-    
-#     def _render_code_generation(self):
-#         """Render code generation interface"""
-        
-#         # Check if API key is set
-#         if not st.session_state.openai_api_key:
-#             st.warning("Please set your OpenAI API key in the Settings tab to use this feature.")
-#             return
-        
-#         # Check if data is available
-#         if self.df is None or self.df.empty:
-#             st.warning("Please upload a dataset first to use this feature.")
-#             return
-            
-#         st.subheader("Code Generation")
-#         st.markdown("Generate Python code for data analysis and visualization")
-        
-#         # Code generation options
-#         code_type = st.selectbox(
-#             "What type of code do you need?",
-#             options=[
-#                 "Data Cleaning & Preprocessing",
-#                 "Exploratory Data Analysis",
-#                 "Statistical Analysis",
-#                 "Visualization",
-#                 "Machine Learning Model",
-#                 "Custom Request"
-#             ]
-#         )
-        
-#         # Custom request input
-#         if code_type == "Custom Request":
-#             code_request = st.text_area(
-#                 "Describe what you want the code to do:",
-#                 placeholder="Example: Generate code to find outliers in the numeric columns and visualize them using boxplots",
-#                 height=100
-#             )
-#         else:
-#             code_request = ""
-        
-#         # Target columns
-#         all_columns = self.df.columns.tolist()
-#         selected_columns = st.multiselect(
-#             "Select columns to focus on (optional):",
-#             options=all_columns
-#         )
-        
-#         # Generate code button
-#         if st.button("Generate Code", type="primary", use_container_width=True):
-#             if code_type == "Custom Request" and not code_request:
-#                 st.error("Please describe what you want the code to do.")
-#             else:
-#                 with st.spinner("Generating code..."):
-#                     generated_code = self._generate_code(code_type, code_request, selected_columns)
-                    
-#                     # Store in session state
-#                     st.session_state.latest_code = generated_code
-                
-#                 # Display code
-#                 st.code(generated_code, language="python")
-                
-#                 # Execute code button
-#                 if st.button("Execute Code", type="secondary", use_container_width=True):
-#                     with st.spinner("Executing code..."):
-#                         self._execute_code(generated_code)
-    
-#     def _generate_code(self, code_type, code_request="", selected_columns=None):
-#         """Generate Python code for data analysis based on requirements"""
-#         # Verify API key
-#         if not st.session_state.openai_api_key:
-#             return "# Please set your OpenAI API key in the Settings tab."
-        
-#         # Get dataframe info
-#         df_info = self._get_dataframe_info()
-        
-#         # Prepare column info
-#         if selected_columns and len(selected_columns) > 0:
-#             column_focus = "Focus on these columns: " + ", ".join(selected_columns)
-#         else:
-#             column_focus = "Consider all columns in the dataset, but prioritize the most relevant ones."
-            
-#         # Create prompt based on code type
-#         if code_type == "Data Cleaning & Preprocessing":
-#             prompt = "Generate Python code to clean and preprocess this dataset. Include handling missing values, outliers, and data type conversions as needed."
-#         elif code_type == "Exploratory Data Analysis":
-#             prompt = "Generate Python code for exploratory data analysis of this dataset. Include summary statistics, distribution analysis, and basic visualizations."
-#         elif code_type == "Statistical Analysis":
-#             prompt = "Generate Python code to perform statistical analysis on this dataset. Include hypothesis testing, correlation analysis, and other relevant statistical methods."
-#         elif code_type == "Visualization":
-#             prompt = "Generate Python code to create informative visualizations for this dataset. Use matplotlib, seaborn, or plotly to create charts that reveal insights."
-#         elif code_type == "Machine Learning Model":
-#             prompt = "Generate Python code to build a machine learning model for this dataset. Include preprocessing, model selection, training, and evaluation."
-#         elif code_type == "Custom Request":
-#             prompt = code_request
-#         else:
-#             prompt = "Generate Python code to analyze this dataset."
-            
-#         # Add column focus
-#         prompt += f"\n\n{column_focus}"
-        
-#         # Create system prompt
-#         system_prompt = f"""You are an advanced Python code generator for data analysis.
-
-# The user is working with a dataset that has the following characteristics:
-# {df_info}
-
-# Your task is to generate clear, well-documented Python code that meets their requirements.
-# The user is working in a Streamlit environment and has pandas, numpy, matplotlib, seaborn, and plotly available.
-# The dataframe is available as 'self.df' in the code.
-
-# Important guidelines for your code:
-# 1. Make the code complete and executable
-# 2. Include helpful comments to explain key steps
-# 3. Use best practices for data analysis
-# 4. Include appropriate error handling
-# 5. Generate visualizations that provide meaningful insights
-# 6. Use pandas efficiently for data manipulation
-
-# Return ONLY the Python code without any additional explanation.
-# """
-
-#         try:
-#             # Make API call
-#             url = "https://api.openai.com/v1/chat/completions"
-#             headers = {
-#                 "Authorization": f"Bearer {st.session_state.openai_api_key}",
-#                 "Content-Type": "application/json"
-#             }
-            
-#             # Get model parameters
-#             model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-#             temperature = getattr(st.session_state, 'openai_temperature', 0.7)
-            
-#             payload = {
-#                 "model": model,
-#                 "messages": [
-#                     {"role": "system", "content": system_prompt},
-#                     {"role": "user", "content": prompt}
-#                 ],
-#                 "temperature": temperature,
-#                 "max_tokens": 2500  # Higher token limit for code generation
-#             }
-            
-#             response = requests.post(url, headers=headers, json=payload)
-            
-#             if response.status_code == 200:
-#                 code = response.json()["choices"][0]["message"]["content"]
-#                 # Strip markdown code blocks if present
-#                 code = re.sub(r'```python\n', '', code)
-#                 code = re.sub(r'```\n?', '', code)
-#                 return code
-#             else:
-#                 error_message = f"# Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-#                 return error_message
-                
-#         except Exception as e:
-#             return f"# Sorry, an error occurred while generating code: {str(e)}"
-    
-#     def _execute_code(self, code):
-#         """Execute the generated Python code and display results"""
-#         try:
-#             # Create a local namespace with access to the dataframe
-#             local_namespace = {
-#                 'self': self,
-#                 'df': self.df,
-#                 'pd': pd,
-#                 'np': np,
-#                 'plt': plt,
-#                 'px': px,
-#                 'go': go,
-#                 'st': st
-#             }
-            
-#             # Execute the code
-#             exec(code, globals(), local_namespace)
-            
-#             # Success message
-#             st.success("Code executed successfully!")
-            
-#         except Exception as e:
-#             st.error(f"Error executing code: {str(e)}")
-            
-#             # Display traceback for debugging
-#             import traceback
-#             st.code(traceback.format_exc(), language="python")
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -619,414 +9,726 @@ import re
 import matplotlib.pyplot as plt
 import plotly.express as px
 import plotly.graph_objects as go
-from io import StringIO
-import uuid
+import seaborn as sns
+from plotly.subplots import make_subplots
+from io import StringIO, BytesIO
 import traceback
+import base64
 
 class GenAIAssistant:
-    """Generative AI powered data analysis assistant with multi-provider support"""
+    """Streamlined Generative AI powered data analysis assistant with Claude API integration"""
     
     def __init__(self, df):
         """Initialize with dataframe"""
         self.df = df
         
-        # Store chat history in session state if not already there
-        if 'genai_chat_history' not in st.session_state:
-            st.session_state.genai_chat_history = []
-        
-        # Store API keys
-        if 'openai_api_key' not in st.session_state:
-            st.session_state.openai_api_key = ""
+        # Initialize session state variables
+        if 'chat_history' not in st.session_state:
+            st.session_state.chat_history = []
             
         if 'claude_api_key' not in st.session_state:
             st.session_state.claude_api_key = ""
             
-        # Store AI provider selection
-        if 'ai_provider' not in st.session_state:
-            st.session_state.ai_provider = "OpenAI"
-            
-        # Store latest generated code
-        if 'latest_code' not in st.session_state:
-            st.session_state.latest_code = None
-            
-        # Generate unique instance ID
-        self.instance_id = str(uuid.uuid4())[:8]
+        if 'claude_model' not in st.session_state:
+            st.session_state.claude_model = "claude-3-sonnet-20240229"
     
-    def _get_unique_key(self, base_name):
-        """Generate a unique key for a Streamlit element"""
-        return f"genai_{base_name}_{self.instance_id}"
-
     def render_interface(self):
-        """Render the GenAI assistant interface"""
-        st.header("💡 GenAI Data Assistant")
+        """Render the streamlined GenAI assistant interface"""
+        st.header("💡 Claude Data Chat Assistant")
         
-        # Setup tab or direct interface
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "💬 Chat Analysis", 
-            "📊 Smart Insights", 
-            "👨‍💻 Code Generation",
-            "⚙️ Settings"
-        ])
+        # Two columns layout
+        col1, col2 = st.columns([3, 1])
         
-        # Chat with Data tab
-        with tab1:
+        with col1:
             self._render_chat_interface()
         
-        # Smart Insights tab
-        with tab2:
-            self._render_insights_interface()
-            
-        # Code Generation tab
-        with tab3:
-            self._render_code_generation()
-            
-        # Settings tab
-        with tab4:
-            self._render_settings()
+        with col2:
+            self._render_compact_settings()
     
-    def _render_settings(self):
-        """Render settings interface"""
-        st.subheader("API Settings")
+    def _render_compact_settings(self):
+        """Render a compact settings panel"""
+        st.subheader("Settings")
         
-        # Provider selection
-        ai_provider = st.radio(
-            "Select AI Provider:",
-            ["OpenAI", "Claude"],
-            horizontal=True,
-            key=self._get_unique_key("ai_provider")
+        # API Key input
+        api_key = st.text_input(
+            "Claude API Key", 
+            value=st.session_state.claude_api_key,
+            type="password",
+            key="claude_api_key_input",
+            help="Enter your Anthropic Claude API key"
         )
         
-        # Store the selected provider
-        st.session_state.ai_provider = ai_provider
+        if api_key != st.session_state.claude_api_key:
+            st.session_state.claude_api_key = api_key
+            if api_key:
+                st.success("API key saved!")
         
-        # Show appropriate API settings based on the selected provider
-        if ai_provider == "OpenAI":
-            with st.form(key=self._get_unique_key("openai_settings_form")):
-                st.subheader("OpenAI Settings")
-                
-                api_key = st.text_input(
-                    "OpenAI API Key", 
-                    value=st.session_state.openai_api_key,
-                    type="password",
-                    key=self._get_unique_key("openai_api_key_input"),
-                    help="Enter your OpenAI API key. Get one at https://platform.openai.com/api-keys"
-                )
-                
-                model = st.selectbox(
-                    "Model",
-                    options=["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
-                    index=2,
-                    key=self._get_unique_key("openai_model_select"),
-                    help="Select the OpenAI model to use"
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    temperature = st.slider(
-                        "Temperature", 
-                        0.0, 1.0, 0.7, 0.1, 
-                        key=self._get_unique_key("openai_temperature_slider"),
-                        help="Higher values make output more creative, lower values more deterministic"
-                    )
-                with col2:
-                    max_tokens = st.slider(
-                        "Max Response Length", 
-                        250, 4000, 1500, 50,
-                        key=self._get_unique_key("openai_max_tokens_slider"),
-                        help="Maximum length of AI responses"
-                    )
-                    
-                # Submit button - regular form submit button
-                submit_button = st.form_submit_button("Save OpenAI Settings")
-                
-                # Process the form submission
-                if submit_button:
-                    st.session_state.openai_api_key = api_key
-                    st.session_state.openai_model = model
-                    st.session_state.openai_temperature = temperature
-                    st.session_state.openai_max_tokens = max_tokens
-                    st.success("OpenAI settings saved successfully!")
+        # Model selection
+        model_options = ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"]
+        model = st.selectbox(
+            "Model",
+            options=model_options,
+            index=model_options.index(st.session_state.claude_model) if st.session_state.claude_model in model_options else 1,
+            key="model_select"
+        )
         
-        else:  # Claude settings
-            with st.form(key=self._get_unique_key("claude_settings_form")):
-                st.subheader("Claude Settings")
-                
-                api_key = st.text_input(
-                    "Claude API Key", 
-                    value=st.session_state.claude_api_key,
-                    type="password",
-                    key=self._get_unique_key("claude_api_key_input"),
-                    help="Enter your Anthropic Claude API key. Get one at https://console.anthropic.com/"
-                )
-                
-                model = st.selectbox(
-                    "Model",
-                    options=["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307"],
-                    index=1,
-                    key=self._get_unique_key("claude_model_select"),
-                    help="Select the Claude model to use"
-                )
-                
-                col1, col2 = st.columns(2)
-                with col1:
-                    temperature = st.slider(
-                        "Temperature", 
-                        0.0, 1.0, 0.7, 0.1, 
-                        key=self._get_unique_key("claude_temperature_slider"),
-                        help="Higher values make output more creative, lower values more deterministic"
-                    )
-                with col2:
-                    max_tokens = st.slider(
-                        "Max Response Length", 
-                        250, 4000, 1500, 50,
-                        key=self._get_unique_key("claude_max_tokens_slider"),
-                        help="Maximum length of AI responses"
-                    )
-                    
-                # Submit button - regular form submit button
-                submit_button = st.form_submit_button("Save Claude Settings")
-                
-                # Process the form submission
-                if submit_button:
-                    st.session_state.claude_api_key = api_key
-                    st.session_state.claude_model = model
-                    st.session_state.claude_temperature = temperature
-                    st.session_state.claude_max_tokens = max_tokens
-                    st.success("Claude settings saved successfully!")
+        if model != st.session_state.claude_model:
+            st.session_state.claude_model = model
         
         # Clear chat history button
-        if st.button("Clear Chat History", key=self._get_unique_key("clear_history")):
-            st.session_state.genai_chat_history = []
+        if st.button("Clear Chat History", key="clear_history_button"):
+            st.session_state.chat_history = []
             st.success("Chat history cleared!")
             st.rerun()
+        
+        # Dataset info
+        if self.df is not None and not self.df.empty:
+            st.subheader("Dataset Info")
+            st.write(f"Rows: {self.df.shape[0]}, Columns: {self.df.shape[1]}")
+            
+            # Show column types
+            st.write("Column Types:")
+            col_types = pd.DataFrame({
+                'Column': self.df.columns,
+                'Type': self.df.dtypes.astype(str)
+            })
+            st.dataframe(col_types, hide_index=True)
     
     def _render_chat_interface(self):
-        """Render chat interface for natural language data analysis"""
+        """Render enhanced chat interface with visualization support"""
+        st.subheader("Chat with your Data")
         
         # Check if API key is set
-        if (st.session_state.ai_provider == "OpenAI" and not st.session_state.openai_api_key) or \
-           (st.session_state.ai_provider == "Claude" and not st.session_state.claude_api_key):
-            st.warning(f"Please set your {st.session_state.ai_provider} API key in the Settings tab to use this feature.")
+        if not st.session_state.claude_api_key:
+            st.warning("Please set your Claude API key in the Settings panel to use this feature.")
             return
         
         # Check if data is available
         if self.df is None or self.df.empty:
             st.warning("Please upload a dataset first to use this feature.")
             return
-            
-        st.subheader("Chat with your Data")
-        st.markdown(f"Ask questions about your data in natural language (using {st.session_state.ai_provider})")
         
         # Display chat history
-        self._display_chat_history()
+        for i, message in enumerate(st.session_state.chat_history):
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                
+                # Display visualizations for assistant messages if they exist
+                if message["role"] == "assistant" and "visualization_code" in message:
+                    try:
+                        st.write("---")  # Add a separator before visualization
+                        
+                        # Create a container for the visualization
+                        viz_container = st.container()
+                        
+                        with viz_container:
+                            # Create a namespace for executing the code
+                            local_namespace = {
+                                'self': self,
+                                'df': self.df,
+                                'pd': pd,
+                                'np': np,
+                                'plt': plt,
+                                'px': px,
+                                'go': go,
+                                'sns': sns,
+                                'make_subplots': make_subplots,
+                                'st': st
+                            }
+                            
+                            # Add explicit display code if not already present
+                            viz_code = message["visualization_code"]
+                            
+                            # Make sure the code has explicit st.plotly_chart or st.pyplot calls
+                            if "st.plotly_chart" not in viz_code and "st.pyplot" not in viz_code:
+                                # Check if it's using plotly
+                                if "px." in viz_code or "go." in viz_code:
+                                    viz_code += "\n\n# Explicitly display the figure\nif 'fig' in locals():\n    st.plotly_chart(fig, use_container_width=True)"
+                                # Check if it's using matplotlib/seaborn
+                                elif "plt." in viz_code or "sns." in viz_code:
+                                    viz_code += "\n\n# Explicitly display the figure\nif 'plt' in locals():\n    st.pyplot(plt.gcf())"
+                            
+                            # Execute the modified code
+                            exec(viz_code, globals(), local_namespace)
+                            
+                            # Additional fallback to ensure plot is displayed
+                            if 'fig' in local_namespace and 'st.plotly_chart' not in viz_code:
+                                if hasattr(local_namespace['fig'], 'update_layout'):  # It's a plotly figure
+                                    st.plotly_chart(local_namespace['fig'], use_container_width=True)
+                            
+                            # Add download options
+                            col1, col2 = st.columns(2)
+                            
+                            # Download code
+                            with col1:
+                                st.download_button(
+                                    "Download Code",
+                                    viz_code,
+                                    file_name=f"visualization_code_{i}.py",
+                                    mime="text/plain",
+                                    key=f"download_viz_code_{i}"
+                                )
+                            
+                            # Download visualization as PNG if available
+                            with col2:
+                                if "fig" in local_namespace:
+                                    if hasattr(local_namespace["fig"], "to_image"):
+                                        # Plotly figure
+                                        img_bytes = local_namespace["fig"].to_image(format="png")
+                                        st.download_button(
+                                            "Download PNG",
+                                            img_bytes,
+                                            file_name=f"visualization_{i}.png",
+                                            mime="image/png",
+                                            key=f"download_viz_png_{i}"
+                                        )
+                                    elif "plt" in local_namespace:
+                                        # Matplotlib figure - save to buffer
+                                        buf = BytesIO()
+                                        plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+                                        buf.seek(0)
+                                        st.download_button(
+                                            "Download PNG",
+                                            buf.getvalue(),
+                                            file_name=f"visualization_{i}.png",
+                                            mime="image/png",
+                                            key=f"download_viz_png_{i}"
+                                        )
+                                        # Close the figure to prevent display duplicates
+                                        plt.close()
+                    except Exception as e:
+                        st.error(f"Error displaying visualization: {str(e)}")
+                        st.code(traceback.format_exc(), language="python")
+                        
+                        # Show the raw code on error to help with debugging
+                        with st.expander("View Visualization Code"):
+                            st.code(message["visualization_code"], language="python")
         
         # Chat input
-        with st.form(key=self._get_unique_key("chat_input_form"), clear_on_submit=True):
-            user_input = st.text_area(
-                "Ask a question about your data:", 
-                key=self._get_unique_key("chat_input"), 
-                height=100
-            )
-            col1, col2 = st.columns([4, 1])
-            
-            with col1:
-                sample_questions = [
-                    "What are the key patterns in this dataset?",
-                    "Analyze the relationship between [column X] and [column Y]",
-                    "What interesting insights can you find in this data?",
-                    "Suggest visualizations that would work well for this data",
-                    "What potential data quality issues do you see?",
-                ]
-                selected_sample = st.selectbox(
-                    "Example questions:", 
-                    [""] + sample_questions,
-                    key=self._get_unique_key("sample_questions")
-                )
-                
-            with col2:
-                # Submit button - regular form submit button
-                submit_button = st.form_submit_button("Submit", use_container_width=True)
+        user_input = st.chat_input("Ask about your data or request visualizations")
         
-        # Process selected sample question or user input
-        if selected_sample and selected_sample != "":
-            user_input = selected_sample
-        
-        if submit_button and user_input:
+        if user_input:
             # Add user message to chat history
-            st.session_state.genai_chat_history.append({
-                "role": "user",
-                "content": user_input
-            })
+            st.session_state.chat_history.append({"role": "user", "content": user_input})
             
-            # Get AI response
-            with st.spinner(f"Analyzing data and generating response with {st.session_state.ai_provider}..."):
-                response = self._generate_chat_response(user_input)
-                
+            # Display the latest user message
+            with st.chat_message("user"):
+                st.markdown(user_input)
+            
+            # Process and display AI response
+            with st.chat_message("assistant"):
+                with st.spinner("Analyzing your data..."):
+                    # Detect if this is a visualization request
+                    is_viz_request = self._is_visualization_request(user_input)
+                    
+                    if is_viz_request:
+                        # Handle as visualization request
+                        response, viz_code = self._get_visualization_response(user_input)
+                    else:
+                        # Handle as regular question
+                        response, viz_code = self._get_claude_response(user_input)
+                    
+                    # Display text response
+                    st.markdown(response)
+                    
+                    # If visualization code was generated, execute and display it
+                    if viz_code:
+                        try:
+                            st.write("---")  # Add a separator before visualization
+                            
+                            # Create a container for the visualization 
+                            viz_container = st.container()
+                            
+                            with viz_container:
+                                # Create namespace for executing the code
+                                local_namespace = {
+                                    'self': self,
+                                    'df': self.df,
+                                    'pd': pd,
+                                    'np': np, 
+                                    'plt': plt,
+                                    'px': px,
+                                    'go': go,
+                                    'sns': sns,
+                                    'make_subplots': make_subplots,
+                                    'st': st
+                                }
+                                
+                                # Add explicit display code if not already present
+                                if "st.plotly_chart" not in viz_code and "st.pyplot" not in viz_code:
+                                    # Check if it's using plotly
+                                    if "px." in viz_code or "go." in viz_code:
+                                        viz_code += "\n\n# Explicitly display the figure\nif 'fig' in locals():\n    st.plotly_chart(fig, use_container_width=True)"
+                                    # Check if it's using matplotlib/seaborn
+                                    elif "plt." in viz_code or "sns." in viz_code:
+                                        viz_code += "\n\n# Explicitly display the figure\nif 'plt' in locals():\n    st.pyplot(plt.gcf())"
+                                
+                                # Show the visualization code in an expander for debugging
+                                with st.expander("View Visualization Code"):
+                                    st.code(viz_code, language="python")
+                                
+                                # Execute the modified code
+                                exec(viz_code, globals(), local_namespace)
+                                
+                                # Additional fallback to ensure plot is displayed
+                                if 'fig' in local_namespace and 'st.plotly_chart' not in viz_code:
+                                    if hasattr(local_namespace['fig'], 'update_layout'):  # It's a plotly figure
+                                        st.plotly_chart(local_namespace['fig'], use_container_width=True)
+                                
+                                # Add download options
+                                col1, col2 = st.columns(2)
+                                
+                                # Download code
+                                with col1:
+                                    st.download_button(
+                                        "Download Code",
+                                        viz_code,
+                                        file_name="visualization_code.py",
+                                        mime="text/plain",
+                                        key="download_latest_viz_code"
+                                    )
+                                
+                                # Download as image (if matplotlib or plotly)
+                                with col2:
+                                    if "fig" in local_namespace:
+                                        if hasattr(local_namespace["fig"], "to_image"):
+                                            # Plotly figure
+                                            img_bytes = local_namespace["fig"].to_image(format="png")
+                                            st.download_button(
+                                                "Download PNG",
+                                                img_bytes,
+                                                file_name="visualization.png",
+                                                mime="image/png",
+                                                key="download_latest_viz_png"
+                                            )
+                                        elif "plt" in local_namespace:
+                                            # Matplotlib figure - save to buffer
+                                            buf = BytesIO()
+                                            plt.savefig(buf, format="png", dpi=300, bbox_inches="tight")
+                                            buf.seek(0)
+                                            st.download_button(
+                                                "Download PNG",
+                                                buf.getvalue(),
+                                                file_name="visualization.png",
+                                                mime="image/png",
+                                                key="download_latest_viz_png"
+                                            )
+                                            # Close the figure to prevent display duplicates
+                                            plt.close()
+                        except Exception as e:
+                            st.error(f"Error displaying visualization: {str(e)}")
+                            st.code(traceback.format_exc(), language="python")
+            
             # Add AI response to chat history
-            st.session_state.genai_chat_history.append({
-                "role": "assistant",
-                "content": response
-            })
+            response_dict = {"role": "assistant", "content": response}
+            if viz_code:
+                response_dict["visualization_code"] = viz_code
             
-            # Refresh the UI
-            st.rerun()
+            st.session_state.chat_history.append(response_dict)
     
-    def _display_chat_history(self):
-        """Display the chat conversation history"""
-        if not st.session_state.genai_chat_history:
-            st.info("Ask me questions about your data in natural language. I'll analyze and provide insights!")
-            return
+    def _is_visualization_request(self, query):
+        """Detect if user is requesting a visualization"""
+        visualization_keywords = [
+            "visualize", "visualization", "visualise", "visualisation",
+            "plot", "chart", "graph", "figure", "diagram", "display",
+            "show", "draw", "create", "generate", "make", "image",
+            # Specific visualization types
+            "histogram", "bar chart", "scatter plot", "line chart", "pie chart",
+            "heatmap", "correlation", "box plot", "violin plot", "density plot",
+            "area chart", "bubble chart", "radar chart", "contour plot",
+            "3d plot", "surface plot", "map", "geo map", "choropleth",
+            "network graph", "tree map", "sunburst", "sankey", "parallel coordinates"
+        ]
         
-        # Container for the entire chat history
-        chat_container = st.container()
-        
-        with chat_container:
-            for idx, message in enumerate(st.session_state.genai_chat_history):
-                if message["role"] == "user":
-                    with st.chat_message("user", avatar="👤"):
-                        st.write(message["content"])
-                else:
-                    with st.chat_message("assistant", avatar="🤖"):
-                        # Check if this is a markdown response with potential code blocks
-                        if "```python" in message["content"] or "```" in message["content"]:
-                            # Split by code blocks and render appropriately
-                            parts = re.split(r'(```(?:python)?\n[\s\S]*?\n```)', message["content"])
-                            for part_idx, part in enumerate(parts):
-                                if part.startswith("```"):
-                                    # This is a code block - extract the code
-                                    code_match = re.search(r'```(?:python)?\n([\s\S]*?)\n```', part)
-                                    if code_match:
-                                        code = code_match.group(1)
-                                        st.code(
-                                            code, 
-                                            language="python", 
-                                            key=self._get_unique_key(f"code_{idx}_{part_idx}")
-                                        )
-                                else:
-                                    # This is regular text
-                                    if part.strip():  # Only show if not empty
-                                        st.write(part)
-                        else:
-                            # Regular text
-                            st.write(message["content"])
+        # Check if query contains visualization keywords
+        query_lower = query.lower()
+        for keyword in visualization_keywords:
+            if keyword in query_lower:
+                return True
+                
+        return False
     
-    def _generate_chat_response(self, user_query):
-        """Generate AI response to user query about the data"""
-        # Check which provider to use
-        if st.session_state.ai_provider == "OpenAI":
-            return self._generate_openai_response(user_query)
-        else:
-            return self._generate_claude_response(user_query)
-    
-    def _generate_openai_response(self, user_query):
-        """Generate response using OpenAI API"""
-        # Verify API key
-        if not st.session_state.openai_api_key:
-            return "Please set your OpenAI API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced data analysis assistant that helps users analyze and understand their data.
-        
+    def _get_visualization_response(self, query):
+        """Process a visualization request and generate appropriate visualization code"""
+        try:
+            # Get dataframe info for context
+            df_info = self._get_dataframe_info()
+            
+            # Get column types for context
+            column_types = self._get_column_types_info()
+            
+            # Create system prompt
+            system_prompt = f"""You are an expert data visualization assistant specialized in creating informative and attractive visualizations using Python.
+
 The user has uploaded a dataset with the following characteristics:
 {df_info}
 
-Your task is to provide insightful analysis and answer questions about this data.
-Make your responses clear, informative and actionable. Use markdown formatting for clarity.
-If appropriate, suggest Python code that could be used to further analyze or visualize the data.
-"""
+Column types information:
+{column_types}
 
-        try:
-            # Prepare the messages
-            messages = [
-                {"role": "system", "content": system_prompt},
-            ]
-            
-            # Add chat history (up to last 6 messages to stay within token limits)
-            for message in st.session_state.genai_chat_history[-6:]:
-                messages.append({"role": message["role"], "content": message["content"]})
-            
-            # Add the current query if it's not already in the history
-            if not st.session_state.genai_chat_history or st.session_state.genai_chat_history[-1]["content"] != user_query:
-                messages.append({"role": "user", "content": user_query})
-            
-            # Get model parameters
-            model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-            temperature = getattr(st.session_state, 'openai_temperature', 0.7)
-            max_tokens = getattr(st.session_state, 'openai_max_tokens', 1500)
+They have requested a visualization. Your task is to:
+
+1. Identify which type of visualization would best suit their request
+2. Generate clear, well-documented Python code that creates this visualization
+3. Provide a brief explanation of what the visualization shows and why it's appropriate
+
+IMPORTANT INSTRUCTIONS FOR CODE GENERATION:
+- Use Plotly Express (px) or Plotly Graph Objects (go) for interactive visualizations when appropriate
+- Use seaborn (sns) or matplotlib (plt) for statistical visualizations when appropriate
+- Store the final plot object as 'fig' (important for download functionality)
+- Add proper titles, labels, and colors to make the visualization informative and attractive
+- Access the dataframe as 'self.df'
+- Make the code standalone and ready to execute in a Streamlit environment
+- ALWAYS include explicit display commands like st.plotly_chart(fig, use_container_width=True) or st.pyplot() at the end of your code
+- Include appropriate code comments to explain key steps
+- Always check column data types before using them - add explicit error handling
+
+IMPORTANT DATA HANDLING INSTRUCTIONS:
+- CAREFULLY CHECK the data type of each column before using it in a visualization
+- DO NOT use categorical columns (strings/objects) directly in numeric operations
+- For categorical columns in numeric contexts, use encoding (like get_dummies) or mapping
+- Add proper error handling for all operations that could fail with mixed data types
+- If categorical data is detected, ensure it's handled appropriately for the visualization type
+- Use df.select_dtypes() to filter columns by type when necessary
+- For scatter plots, ensure both axes use numeric data
+- For categorical plots, ensure categorical columns are used appropriately
+- For all visualizations involving numeric operations, verify columns are numeric first
+
+Your response should have two parts:
+1. A brief explanation of the visualization (2-4 sentences)
+2. The complete Python code that generates the visualization
+
+The code will be executed automatically, so ensure it is correct and ready to run."""
             
             # Make API call
-            url = "https://api.openai.com/v1/chat/completions"
+            url = "https://api.anthropic.com/v1/messages"
             headers = {
-                "Authorization": f"Bearer {st.session_state.openai_api_key}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": model,
-                "messages": messages,
-                "temperature": temperature,
-                "max_tokens": max_tokens
+                "x-api-key": st.session_state.claude_api_key,
+                "anthropic-version": "2023-06-01",
+                "content-type": "application/json"
             }
             
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-            else:
-                error_message = f"Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
-                
-        except Exception as e:
-            return f"Sorry, an error occurred while generating the response: {str(e)}"
-    
-    def _generate_claude_response(self, user_query):
-        """Generate response using Claude API"""
-        # Verify API key
-        if not st.session_state.claude_api_key:
-            return "Please set your Claude API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced data analysis assistant that helps users analyze and understand their data.
-        
-The user has uploaded a dataset with the following characteristics:
-{df_info}
-
-Your task is to provide insightful analysis and answer questions about this data.
-Make your responses clear, informative and actionable. Use markdown formatting for clarity.
-If appropriate, suggest Python code that could be used to further analyze or visualize the data.
-"""
-
-        try:
-            # Prepare messages in Anthropic format
+            # Create messages array with context
             messages = []
             
-            # Add chat history (up to last 6 messages to stay within token limits)
-            for message in st.session_state.genai_chat_history[-6:]:
+            # Add last few messages for context (up to 3 for visualization requests)
+            if len(st.session_state.chat_history) > 0:
+                for message in st.session_state.chat_history[-3:]:
+                    role = "user" if message["role"] == "user" else "assistant"
+                    messages.append({"role": role, "content": message["content"]})
+            
+            # Add current query
+            messages.append({"role": "user", "content": query})
+            
+            payload = {
+                "model": st.session_state.claude_model,
+                "messages": messages,
+                "system": system_prompt,
+                "max_tokens": 3000
+            }
+            
+            response = requests.post(url, headers=headers, json=payload, timeout=45)
+            
+            if response.status_code == 200:
+                text_response = response.json()["content"][0]["text"]
+                
+                # Extract code if present
+                code_blocks = re.findall(r'```python\n(.*?)```', text_response, re.DOTALL)
+                
+                if code_blocks:
+                    # Extract the first code block for execution
+                    viz_code = code_blocks[0]
+                    
+                    # Ensure there are display commands in the code
+                    if "st.plotly_chart" not in viz_code and "st.pyplot" not in viz_code:
+                        # Check if it's using plotly
+                        if "px." in viz_code or "go." in viz_code:
+                            viz_code += "\n\n# Explicitly display the figure\nif 'fig' in locals():\n    st.plotly_chart(fig, use_container_width=True)"
+                        # Check if it's using matplotlib/seaborn
+                        elif "plt." in viz_code or "sns." in viz_code:
+                            viz_code += "\n\n# Explicitly display the figure\nif 'plt' in locals():\n    st.pyplot(plt.gcf())"
+                    
+                    # Remove code blocks from the text response
+                    clean_response = re.sub(r'```python\n.*?```', '', text_response, flags=re.DOTALL)
+                    clean_response = re.sub(r'```\n', '', clean_response)
+                    clean_response = clean_response.replace('```', '')
+                    
+                    # Add visualization success note
+                    clean_response += "\n\n*The visualization has been automatically generated below.*"
+                    
+                    return clean_response.strip(), viz_code
+                else:
+                    # If no code block was found but it's a visualization request,
+                    # generate a default visualization
+                    return text_response, self._generate_fallback_visualization()
+            else:
+                error_data = response.json()
+                error_message = error_data.get("error", {}).get("message", "Unknown error")
+                return f"Error: {error_message}", None
+                
+        except Exception as e:
+            return f"Sorry, an error occurred while generating the visualization: {str(e)}", None
+    
+    def _get_column_types_info(self):
+        """Get detailed information about column types for visualization context"""
+        try:
+            # Identify column types
+            numeric_cols = list(self.df.select_dtypes(include=['number']).columns)
+            categorical_cols = list(self.df.select_dtypes(include=['object', 'category']).columns)
+            datetime_cols = list(self.df.select_dtypes(include=['datetime']).columns)
+            bool_cols = list(self.df.select_dtypes(include=['bool']).columns)
+            
+            # Create information string
+            info = []
+            info.append("COLUMN TYPES:")
+            
+            if numeric_cols:
+                info.append(f"- Numeric columns: {', '.join(numeric_cols)}")
+            else:
+                info.append("- No numeric columns detected")
+                
+            if categorical_cols:
+                info.append(f"- Categorical columns: {', '.join(categorical_cols)}")
+                # Add sample values for categorical columns
+                for col in categorical_cols[:3]:  # Limit to first 3 columns
+                    unique_values = self.df[col].unique()
+                    if len(unique_values) <= 10:  # Only include if small number of unique values
+                        values_str = ', '.join([f"'{str(val)}'" for val in unique_values[:5]])
+                        if len(unique_values) > 5:
+                            values_str += f", ... ({len(unique_values)} unique values)"
+                        info.append(f"  - {col} values: {values_str}")
+                    else:
+                        info.append(f"  - {col}: {len(unique_values)} unique values")
+            else:
+                info.append("- No categorical columns detected")
+                
+            if datetime_cols:
+                info.append(f"- Datetime columns: {', '.join(datetime_cols)}")
+            else:
+                info.append("- No datetime columns detected")
+                
+            if bool_cols:
+                info.append(f"- Boolean columns: {', '.join(bool_cols)}")
+            
+            return "\n".join(info)
+            
+        except Exception as e:
+            return f"Error getting column types: {str(e)}"
+    
+    def _generate_fallback_visualization(self):
+        """Generate a safe fallback visualization that handles categorical data properly"""
+        try:
+            # Get column types
+            numeric_cols = list(self.df.select_dtypes(include=['number']).columns)
+            categorical_cols = list(self.df.select_dtypes(include=['object', 'category']).columns)
+            
+            # Choose visualization based on available data
+            if len(numeric_cols) >= 1 and len(categorical_cols) >= 1:
+                # Create a box plot of numeric data grouped by categorical
+                code = f"""
+import plotly.express as px
+import pandas as pd
+
+# Create a box plot of numeric data grouped by categorical
+# This visualization safely handles both numeric and categorical data
+try:
+    numeric_col = "{numeric_cols[0]}"
+    categorical_col = "{categorical_cols[0]}"
+    
+    # Create figure - box plots work well with mixed data types
+    fig = px.box(
+        self.df, 
+        x=categorical_col, 
+        y=numeric_col, 
+        title=f"Distribution of {{numeric_col}} by {{categorical_col}}",
+        points="all"  # Show all points for small datasets
+    )
+    
+    # Improve layout
+    fig.update_layout(
+        xaxis_title=categorical_col,
+        yaxis_title=numeric_col,
+        height=500
+    )
+    
+    # Display the figure - IMPORTANT for visualization to appear
+    st.plotly_chart(fig, use_container_width=True)
+    
+except Exception as e:
+    st.error(f"Error creating visualization: {{str(e)}}")
+    
+    # Fallback to safe table view
+    st.write("### Dataset Preview")
+    st.write("Showing a sample of the data instead:")
+    st.dataframe(self.df.head(10))
+"""
+            elif len(numeric_cols) >= 2:
+                # Create a scatter plot of two numeric columns
+                code = f"""
+import plotly.express as px
+import pandas as pd
+
+# Create a scatter plot of two numeric columns
+try:
+    # Select two numeric columns
+    x_col = "{numeric_cols[0]}"
+    y_col = "{numeric_cols[1]}"
+    
+    # Create scatter plot
+    fig = px.scatter(
+        self.df, 
+        x=x_col, 
+        y=y_col, 
+        title=f"{{y_col}} vs {{x_col}}"
+    )
+    
+    # Improve layout
+    fig.update_layout(
+        xaxis_title=x_col,
+        yaxis_title=y_col,
+        height=500
+    )
+    
+    # Display the figure - IMPORTANT for visualization to appear
+    st.plotly_chart(fig, use_container_width=True)
+    
+except Exception as e:
+    st.error(f"Error creating visualization: {{str(e)}}")
+    
+    # Fallback to safe table view
+    st.write("### Dataset Preview")
+    st.write("Showing a sample of the data instead:")
+    st.dataframe(self.df.head(10))
+"""
+            elif len(numeric_cols) == 1:
+                # Create a histogram of the numeric column
+                code = f"""
+import plotly.express as px
+import pandas as pd
+
+# Create a histogram of the numeric column
+try:
+    numeric_col = "{numeric_cols[0]}"
+    
+    # Create histogram
+    fig = px.histogram(
+        self.df, 
+        x=numeric_col, 
+        title=f"Distribution of {{numeric_col}}"
+    )
+    
+    # Improve layout
+    fig.update_layout(
+        xaxis_title=numeric_col,
+        yaxis_title="Count",
+        height=500
+    )
+    
+    # Display the figure - IMPORTANT for visualization to appear
+    st.plotly_chart(fig, use_container_width=True)
+    
+except Exception as e:
+    st.error(f"Error creating visualization: {{str(e)}}")
+    
+    # Fallback to safe table view
+    st.write("### Dataset Preview")
+    st.write("Showing a sample of the data instead:")
+    st.dataframe(self.df.head(10))
+"""
+            elif len(categorical_cols) >= 1:
+                # Create a bar chart of categorical value counts
+                code = f"""
+import plotly.express as px
+import pandas as pd
+
+# Create a bar chart of categorical value counts
+try:
+    categorical_col = "{categorical_cols[0]}"
+    
+    # Count values
+    value_counts = self.df[categorical_col].value_counts().reset_index()
+    value_counts.columns = [categorical_col, "Count"]
+    
+    # Create bar chart
+    fig = px.bar(
+        value_counts, 
+        x=categorical_col, 
+        y="Count", 
+        title=f"Counts of {{categorical_col}}"
+    )
+    
+    # Improve layout
+    fig.update_layout(
+        xaxis_title=categorical_col,
+        yaxis_title="Count",
+        height=500
+    )
+    
+    # Display the figure - IMPORTANT for visualization to appear
+    st.plotly_chart(fig, use_container_width=True)
+    
+except Exception as e:
+    st.error(f"Error creating visualization: {{str(e)}}")
+    
+    # Fallback to safe table view
+    st.write("### Dataset Preview")
+    st.write("Showing a sample of the data instead:")
+    st.dataframe(self.df.head(10))
+"""
+            else:
+                # Fallback to table view
+                code = """
+# Create a table view of the data
+st.write("### Dataset Preview")
+st.dataframe(self.df.head(10))
+"""
+            
+            return code
+        except Exception as e:
+            # Ultra-safe fallback
+            return f"""
+# Error generating visualization code: {str(e)}
+st.error("Could not generate visualization due to data type issues.")
+st.write("### Dataset Preview")
+st.dataframe(self.df.head(10))
+"""
+    
+    def _get_claude_response(self, user_query):
+        """Get response from Claude API with potential visualization code"""
+        try:
+            # Get dataframe info for context
+            df_info = self._get_dataframe_info()
+            
+            # Create messages array
+            messages = []
+            
+            # Add past messages (up to most recent 6)
+            for message in st.session_state.chat_history[-6:]:
                 role = "user" if message["role"] == "user" else "assistant"
                 messages.append({"role": role, "content": message["content"]})
             
-            # Add the current query if it's not already in the history
-            if not st.session_state.genai_chat_history or st.session_state.genai_chat_history[-1]["content"] != user_query:
-                messages.append({"role": "user", "content": user_query})
+            # Create system prompt
+            system_prompt = f"""You are an advanced data analysis assistant that helps users analyze and understand their data.
             
-            # Get model parameters
-            model = getattr(st.session_state, 'claude_model', "claude-3-sonnet-20240229")
-            temperature = getattr(st.session_state, 'claude_temperature', 0.7)
-            max_tokens = getattr(st.session_state, 'claude_max_tokens', 1500)
-            
-            # Prepare payload
-            payload = {
-                "model": model,
-                "messages": messages,
-                "system": system_prompt,
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
+The user has uploaded a dataset with the following characteristics:
+{df_info}
+
+Your task is to provide insightful analysis and answer questions about this data.
+Make your responses clear, informative and actionable. Use markdown formatting for clarity.
+
+If the user's question could benefit from a visualization, include Python code that generates an appropriate visualization.
+When including visualization code, follow these rules:
+- Store the final plot object as 'fig' (important for download functionality)
+- Use Plotly Express (px) or Plotly Graph Objects (go) for interactive visualizations
+- For Matplotlib plots, use plt.figure() to create new figure objects
+- Add proper titles, labels, and colors
+- Access the dataframe as 'self.df'
+- Include appropriate code comments
+- Make the code complete and ready to execute
+- ALWAYS check data types before visualizing to prevent errors with categorical data
+- ALWAYS include explicit display commands (st.plotly_chart or st.pyplot) at the end of your code
+
+The code will be executed automatically if provided."""
             
             # Make API call
             url = "https://api.anthropic.com/v1/messages"
@@ -1036,561 +738,160 @@ If appropriate, suggest Python code that could be used to further analyze or vis
                 "content-type": "application/json"
             }
             
-            response = requests.post(url, headers=headers, json=payload)
+            payload = {
+                "model": st.session_state.claude_model,
+                "messages": messages + [{"role": "user", "content": user_query}],
+                "system": system_prompt,
+                "max_tokens": 2000
+            }
+            
+            response = requests.post(url, headers=headers, json=payload, timeout=45)
             
             if response.status_code == 200:
-                return response.json()["content"][0]["text"]
+                text_response = response.json()["content"][0]["text"]
+                
+                # Extract code if present
+                code_blocks = re.findall(r'```python\n(.*?)```', text_response, re.DOTALL)
+                
+                if code_blocks:
+                    # Extract the first code block that might contain visualization code
+                    potential_viz_code = code_blocks[0]
+                    
+                    # Check if it's likely visualization code
+                    viz_keywords = ['plt.', 'px.', 'sns.', 'fig.', 'go.Figure', '.plot(', 'st.plotly_chart', 'st.pyplot']
+                    is_viz_code = any(keyword in potential_viz_code for keyword in viz_keywords)
+                    
+                    if is_viz_code:
+                        # Make sure there are display commands
+                        if "st.plotly_chart" not in potential_viz_code and "st.pyplot" not in potential_viz_code:
+                            # Check if it's using plotly
+                            if "px." in potential_viz_code or "go." in potential_viz_code:
+                                potential_viz_code += "\n\n# Explicitly display the figure\nif 'fig' in locals():\n    st.plotly_chart(fig, use_container_width=True)"
+                            # Check if it's using matplotlib/seaborn
+                            elif "plt." in potential_viz_code or "sns." in potential_viz_code:
+                                potential_viz_code += "\n\n# Explicitly display the figure\nif 'plt' in locals():\n    st.pyplot(plt.gcf())"
+                        
+                        # Clean up response text
+                        clean_response = text_response.replace(f"```python\n{code_blocks[0]}```", "*Visualization code has been extracted and executed below.*")
+                        
+                        return clean_response, potential_viz_code
+                    else:
+                        # It's likely just example code, not visualization code
+                        return text_response, None
+                else:
+                    # No code blocks found
+                    return text_response, None
             else:
-                error_message = f"Error from Claude API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
+                error_data = response.json()
+                error_message = error_data.get("error", {}).get("message", "Unknown error")
+                return f"Error: {error_message}", None
                 
         except Exception as e:
-            return f"Sorry, an error occurred while generating the response with Claude: {str(e)}"
+            return f"Sorry, an error occurred: {str(e)}", None
     
     def _get_dataframe_info(self):
         """Get information about the dataframe for context"""
-        # Basic stats
-        info = []
-        info.append(f"- Dimensions: {self.df.shape[0]} rows, {self.df.shape[1]} columns")
-        
-        # Column names and types
-        info.append("- Columns:")
-        for col in self.df.columns:
-            dtype = self.df[col].dtype
-            unique = self.df[col].nunique()
-            missing = self.df[col].isna().sum()
-            missing_pct = (missing / len(self.df)) * 100
+        try:
+            # Basic stats
+            info = []
+            info.append(f"- Dimensions: {self.df.shape[0]} rows, {self.df.shape[1]} columns")
             
-            # Add column info
-            if missing_pct > 0:
-                info.append(f"  - {col}: {dtype} ({unique} unique values, {missing_pct:.1f}% missing)")
-            else:
-                info.append(f"  - {col}: {dtype} ({unique} unique values)")
-        
-        # Sample data (first 5 rows in CSV format)
-        sample_data = self.df.head(5).to_csv(index=False)
-        info.append("\n- Sample Data (first 5 rows):")
-        info.append("```")
-        info.append(sample_data)
-        info.append("```")
-        
-        # Add summary statistics for numeric columns
-        numeric_cols = self.df.select_dtypes(include=['number']).columns.tolist()
-        if numeric_cols:
-            info.append("\n- Summary Statistics (numeric columns):")
-            stats_df = self.df[numeric_cols].describe().to_string()
+            # Column names and types
+            info.append("- Columns:")
+            for col in self.df.columns:
+                dtype = self.df[col].dtype
+                info.append(f"  - {col}: {dtype}")
+            
+            # Sample data
+            info.append("\n- Sample Data (first 5 rows):")
+            sample_data = self.df.head(5).to_csv(index=False)
             info.append("```")
-            info.append(stats_df)
+            info.append(sample_data)
             info.append("```")
             
-        return "\n".join(info)
-    
-    def _render_insights_interface(self):
-        """Render automated insights generation interface"""
-        
-        # Check if API key is set
-        if (st.session_state.ai_provider == "OpenAI" and not st.session_state.openai_api_key) or \
-           (st.session_state.ai_provider == "Claude" and not st.session_state.claude_api_key):
-            st.warning(f"Please set your {st.session_state.ai_provider} API key in the Settings tab to use this feature.")
-            return
-        
-        # Check if data is available
-        if self.df is None or self.df.empty:
-            st.warning("Please upload a dataset first to use this feature.")
-            return
+            # Basic statistics for numeric columns
+            numeric_cols = self.df.select_dtypes(include=['number']).columns
+            if len(numeric_cols) > 0:
+                info.append("\n- Numeric Column Statistics:")
+                stats = self.df[numeric_cols].describe().transpose()
+                stats_str = stats.to_string()
+                info.append("```")
+                info.append(stats_str)
+                info.append("```")
             
-        st.subheader("Smart Insights Generator")
-        st.markdown(f"Automatically generate key insights from your data (using {st.session_state.ai_provider})")
-        
-        # Insight generation options
-        insight_type = st.selectbox(
-            "Select insight type:",
-            options=[
-                "General Overview",
-                "Data Quality Assessment",
-                "Patterns & Correlations",
-                "Key Metrics Summary",
-                "Actionable Recommendations"
-            ],
-            key=self._get_unique_key("insight_type")
-        )
-        
-        # Extra context
-        extra_context = st.text_area(
-            "Additional context (optional):",
-            placeholder="Add any specific information or focus areas you'd like insights on...",
-            key=self._get_unique_key("extra_context"),
-            help="Provide additional context about your data or specific aspects you're interested in"
-        )
-        
-        # Generate insights button
-        if st.button(
-            "Generate Insights", 
-            key=self._get_unique_key("generate_insights"), 
-            type="primary", 
-            use_container_width=True
-        ):
-            with st.spinner(f"Analyzing data and generating insights with {st.session_state.ai_provider}..."):
-                insights = self._generate_insights(insight_type, extra_context)
-                
-            # Display insights in a nice format
-            st.success("✅ Insights generated successfully!")
+            # Missing values information
+            missing_values = self.df.isnull().sum()
+            if missing_values.sum() > 0:
+                info.append("\n- Missing Values:")
+                for col, count in missing_values.items():
+                    if count > 0:
+                        percentage = (count / len(self.df)) * 100
+                        info.append(f"  - {col}: {count} ({percentage:.2f}%)")
             
-            with st.expander("Generated Insights", expanded=True):
-                st.markdown(insights)
-                
-                # Add download option
-                timestamp = int(time.time())
-                filename = f"{insight_type.lower().replace(' ', '_')}_{timestamp}.md"
-                
-                st.download_button(
-                    label="Download Insights",
-                    data=insights,
-                    file_name=filename,
-                    mime="text/markdown",
-                    key=self._get_unique_key("download_insights"),
-                    use_container_width=True
-                )
-    
-    def _generate_insights(self, insight_type, extra_context=""):
-        """Generate automated insights based on the data"""
-        # Check which provider to use
-        if st.session_state.ai_provider == "OpenAI":
-            return self._generate_openai_insights(insight_type, extra_context)
-        else:
-            return self._generate_claude_insights(insight_type, extra_context)
-    
-    def _generate_openai_insights(self, insight_type, extra_context=""):
-        """Generate insights using OpenAI API"""
-        # Verify API key
-        if not st.session_state.openai_api_key:
-            return "Please set your OpenAI API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Create prompt based on insight type
-        if insight_type == "General Overview":
-            prompt = "Provide a comprehensive overview of this dataset. Include key statistics, notable patterns, and overall insights."
-        elif insight_type == "Data Quality Assessment":
-            prompt = "Assess the quality of this dataset. Identify missing values, outliers, inconsistencies, and other data quality issues."
-        elif insight_type == "Patterns & Correlations":
-            prompt = "Identify key patterns, correlations, and relationships between variables in this dataset."
-        elif insight_type == "Key Metrics Summary":
-            prompt = "Summarize the key metrics and KPIs from this dataset. Highlight the most important numbers and trends."
-        elif insight_type == "Actionable Recommendations":
-            prompt = "Based on this data, provide actionable recommendations and next steps for analysis or business decisions."
-        else:
-            prompt = "Analyze this dataset and provide key insights."
-            
-        # Add extra context if provided
-        if extra_context:
-            prompt += f"\n\nAdditional context: {extra_context}"
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced data analysis assistant that generates insightful reports.
-
-The user has uploaded a dataset with the following characteristics:
-{df_info}
-
-Your task is to create a well-structured, comprehensive {insight_type} report.
-Format your response in Markdown with clear sections, bullet points, and emphasis where appropriate.
-Include specific details and numbers from the dataset to support your insights.
-Be thorough yet concise, focusing on actionable information.
-"""
-
-        try:
-            # Make API call
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {st.session_state.openai_api_key}",
-                "Content-Type": "application/json"
-            }
-            
-            # Get model parameters
-            model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-            temperature = getattr(st.session_state, 'openai_temperature', 0.7)
-            max_tokens = getattr(st.session_state, 'openai_max_tokens', 1500)
-            
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": temperature,
-                "max_tokens": max_tokens
-            }
-            
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                return response.json()["choices"][0]["message"]["content"]
-            else:
-                error_message = f"Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
-                
+            return "\n".join(info)
         except Exception as e:
-            return f"Sorry, an error occurred while generating insights: {str(e)}"
+            return f"Error getting dataframe info: {str(e)}"
+
+# Main app code
+def main():
+    st.set_page_config(page_title="Claude Data Assistant", layout="wide")
     
-    def _generate_claude_insights(self, insight_type, extra_context=""):
-        """Generate insights using Claude API"""
-        # Verify API key
-        if not st.session_state.claude_api_key:
-            return "Please set your Claude API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Create prompt based on insight type
-        if insight_type == "General Overview":
-            prompt = "Provide a comprehensive overview of this dataset. Include key statistics, notable patterns, and overall insights."
-        elif insight_type == "Data Quality Assessment":
-            prompt = "Assess the quality of this dataset. Identify missing values, outliers, inconsistencies, and other data quality issues."
-        elif insight_type == "Patterns & Correlations":
-            prompt = "Identify key patterns, correlations, and relationships between variables in this dataset."
-        elif insight_type == "Key Metrics Summary":
-            prompt = "Summarize the key metrics and KPIs from this dataset. Highlight the most important numbers and trends."
-        elif insight_type == "Actionable Recommendations":
-            prompt = "Based on this data, provide actionable recommendations and next steps for analysis or business decisions."
-        else:
-            prompt = "Analyze this dataset and provide key insights."
-            
-        # Add extra context if provided
-        if extra_context:
-            prompt += f"\n\nAdditional context: {extra_context}"
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced data analysis assistant that generates insightful reports.
-
-The user has uploaded a dataset with the following characteristics:
-{df_info}
-
-Your task is to create a well-structured, comprehensive {insight_type} report.
-Format your response in Markdown with clear sections, bullet points, and emphasis where appropriate.
-Include specific details and numbers from the dataset to support your insights.
-Be thorough yet concise, focusing on actionable information.
-"""
-
+    st.title("Claude Data Assistant")
+    
+    # File uploader
+    uploaded_file = st.file_uploader("Upload your data file", type=["csv", "xlsx", "xls"])
+    
+    if uploaded_file is not None:
         try:
-            # Prepare payload
-            payload = {
-                "model": getattr(st.session_state, 'claude_model', "claude-3-sonnet-20240229"),
-                "messages": [{"role": "user", "content": prompt}],
-                "system": system_prompt,
-                "temperature": getattr(st.session_state, 'claude_temperature', 0.7),
-                "max_tokens": getattr(st.session_state, 'claude_max_tokens', 1500)
-            }
-            
-            # Make API call
-            url = "https://api.anthropic.com/v1/messages"
-            headers = {
-                "x-api-key": st.session_state.claude_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            }
-            
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                return response.json()["content"][0]["text"]
+            # Load data
+            if uploaded_file.name.endswith('.csv'):
+                df = pd.read_csv(uploaded_file)
             else:
-                error_message = f"Error from Claude API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
-                
-        except Exception as e:
-            return f"Sorry, an error occurred while generating insights with Claude: {str(e)}"
-    
-    def _render_code_generation(self):
-        """Render code generation interface"""
-        
-        # Check if API key is set
-        if (st.session_state.ai_provider == "OpenAI" and not st.session_state.openai_api_key) or \
-           (st.session_state.ai_provider == "Claude" and not st.session_state.claude_api_key):
-            st.warning(f"Please set your {st.session_state.ai_provider} API key in the Settings tab to use this feature.")
-            return
-        
-        # Check if data is available
-        if self.df is None or self.df.empty:
-            st.warning("Please upload a dataset first to use this feature.")
-            return
+                df = pd.read_excel(uploaded_file)
             
-        st.subheader("Code Generation")
-        st.markdown(f"Generate Python code for data analysis and visualization (using {st.session_state.ai_provider})")
+            # Display success message and data preview
+            st.success(f"File uploaded successfully: {uploaded_file.name}")
+            
+            with st.expander("Data Preview", expanded=False):
+                st.dataframe(df.head(10))
+            
+            # Initialize and render GenAI assistant
+            assistant = GenAIAssistant(df)
+            assistant.render_interface()
+            
+        except Exception as e:
+            st.error(f"Error loading file: {str(e)}")
+            st.code(traceback.format_exc())
+            
+    else:
+        st.info("Please upload a CSV or Excel file to begin.")
         
-        # Code generation options
-        code_type = st.selectbox(
-            "What type of code do you need?",
-            options=[
-                "Data Cleaning & Preprocessing",
-                "Exploratory Data Analysis",
-                "Statistical Analysis",
-                "Visualization",
-                "Machine Learning Model",
-                "Custom Request"
-            ],
-            key=self._get_unique_key("code_type")
-        )
-        
-        # Custom request input
-        if code_type == "Custom Request":
-            code_request = st.text_area(
-                "Describe what you want the code to do:",
-                placeholder="Example: Generate code to find outliers in the numeric columns and visualize them using boxplots",
-                height=100,
-                key=self._get_unique_key("code_request")
+        # Demo mode with sample data
+        if st.button("Use Sample Data (Iris Dataset)"):
+            # Load Iris dataset
+            from sklearn.datasets import load_iris
+            iris = load_iris()
+            iris_df = pd.DataFrame(
+                data=np.c_[iris['data'], iris['target']],
+                columns=iris['feature_names'] + ['species']
             )
-        else:
-            code_request = ""
-        
-        # Target columns
-        all_columns = self.df.columns.tolist()
-        selected_columns = st.multiselect(
-            "Select columns to focus on (optional):",
-            options=all_columns,
-            key=self._get_unique_key("selected_columns")
-        )
-        
-        # Generate code button
-        if st.button(
-            "Generate Code", 
-            key=self._get_unique_key("generate_code"),
-            type="primary", 
-            use_container_width=True
-        ):
-            if code_type == "Custom Request" and not code_request:
-                st.error("Please describe what you want the code to do.")
-            else:
-                with st.spinner(f"Generating code with {st.session_state.ai_provider}..."):
-                    generated_code = self._generate_code(code_type, code_request, selected_columns)
-                    
-                    # Store in session state
-                    st.session_state.latest_code = generated_code
-                
-                # Display code
-                st.code(generated_code, language="python")
-                
-                # Execute code button
-                if st.button(
-                    "Execute Code", 
-                    key=self._get_unique_key("execute_code"),
-                    type="secondary", 
-                    use_container_width=True
-                ):
-                    with st.spinner("Executing code..."):
-                        self._execute_code(generated_code)
-    
-    def _generate_code(self, code_type, code_request="", selected_columns=None):
-        """Generate Python code for data analysis based on requirements"""
-        # Check which provider to use
-        if st.session_state.ai_provider == "OpenAI":
-            return self._generate_openai_code(code_type, code_request, selected_columns)
-        else:
-            return self._generate_claude_code(code_type, code_request, selected_columns)
-    
-    def _generate_openai_code(self, code_type, code_request="", selected_columns=None):
-        """Generate code using OpenAI API"""
-        # Verify API key
-        if not st.session_state.openai_api_key:
-            return "# Please set your OpenAI API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Prepare column info
-        if selected_columns and len(selected_columns) > 0:
-            column_focus = "Focus on these columns: " + ", ".join(selected_columns)
-        else:
-            column_focus = "Consider all columns in the dataset, but prioritize the most relevant ones."
             
-        # Create prompt based on code type
-        if code_type == "Data Cleaning & Preprocessing":
-            prompt = "Generate Python code to clean and preprocess this dataset. Include handling missing values, outliers, and data type conversions as needed."
-        elif code_type == "Exploratory Data Analysis":
-            prompt = "Generate Python code for exploratory data analysis of this dataset. Include summary statistics, distribution analysis, and basic visualizations."
-        elif code_type == "Statistical Analysis":
-            prompt = "Generate Python code to perform statistical analysis on this dataset. Include hypothesis testing, correlation analysis, and other relevant statistical methods."
-        elif code_type == "Visualization":
-            prompt = "Generate Python code to create informative visualizations for this dataset. Use matplotlib, seaborn, or plotly to create charts that reveal insights."
-        elif code_type == "Machine Learning Model":
-            prompt = "Generate Python code to build a machine learning model for this dataset. Include preprocessing, model selection, training, and evaluation."
-        elif code_type == "Custom Request":
-            prompt = code_request
-        else:
-            prompt = "Generate Python code to analyze this dataset."
+            # Convert numeric species to string labels
+            species_names = iris.target_names
+            iris_df['species'] = iris_df['species'].astype(int).map({
+                0: species_names[0],
+                1: species_names[1],
+                2: species_names[2]
+            })
             
-        # Add column focus
-        prompt += f"\n\n{column_focus}"
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced Python code generator for data analysis.
-
-The user is working with a dataset that has the following characteristics:
-{df_info}
-
-Your task is to generate clear, well-documented Python code that meets their requirements.
-The user is working in a Streamlit environment and has pandas, numpy, matplotlib, seaborn, and plotly available.
-The dataframe is available as 'self.df' in the code.
-
-Important guidelines for your code:
-1. Make the code complete and executable
-2. Include helpful comments to explain key steps
-3. Use best practices for data analysis
-4. Include appropriate error handling
-5. Generate visualizations that provide meaningful insights
-6. Use pandas efficiently for data manipulation
-
-Return ONLY the Python code without any additional explanation.
-"""
-
-        try:
-            # Make API call
-            url = "https://api.openai.com/v1/chat/completions"
-            headers = {
-                "Authorization": f"Bearer {st.session_state.openai_api_key}",
-                "Content-Type": "application/json"
-            }
+            # Rename columns to remove spaces
+            iris_df.columns = [col.replace(' ', '_') for col in iris_df.columns]
             
-            # Get model parameters
-            model = getattr(st.session_state, 'openai_model', "gpt-3.5-turbo")
-            temperature = getattr(st.session_state, 'openai_temperature', 0.7)
+            st.success("Loaded Iris Dataset")
             
-            payload = {
-                "model": model,
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                "temperature": temperature,
-                "max_tokens": 2500  # Higher token limit for code generation
-            }
+            with st.expander("Data Preview", expanded=False):
+                st.dataframe(iris_df.head(10))
             
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                code = response.json()["choices"][0]["message"]["content"]
-                # Strip markdown code blocks if present
-                code = re.sub(r'```python\n', '', code)
-                code = re.sub(r'```\n?', '', code)
-                return code
-            else:
-                error_message = f"# Error from OpenAI API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
-                
-        except Exception as e:
-            return f"# Sorry, an error occurred while generating code: {str(e)}"
-    
-    def _generate_claude_code(self, code_type, code_request="", selected_columns=None):
-        """Generate code using Claude API"""
-        # Verify API key
-        if not st.session_state.claude_api_key:
-            return "# Please set your Claude API key in the Settings tab."
-        
-        # Get dataframe info
-        df_info = self._get_dataframe_info()
-        
-        # Prepare column info
-        if selected_columns and len(selected_columns) > 0:
-            column_focus = "Focus on these columns: " + ", ".join(selected_columns)
-        else:
-            column_focus = "Consider all columns in the dataset, but prioritize the most relevant ones."
-            
-        # Create prompt based on code type
-        if code_type == "Data Cleaning & Preprocessing":
-            prompt = "Generate Python code to clean and preprocess this dataset. Include handling missing values, outliers, and data type conversions as needed."
-        elif code_type == "Exploratory Data Analysis":
-            prompt = "Generate Python code for exploratory data analysis of this dataset. Include summary statistics, distribution analysis, and basic visualizations."
-        elif code_type == "Statistical Analysis":
-            prompt = "Generate Python code to perform statistical analysis on this dataset. Include hypothesis testing, correlation analysis, and other relevant statistical methods."
-        elif code_type == "Visualization":
-            prompt = "Generate Python code to create informative visualizations for this dataset. Use matplotlib, seaborn, or plotly to create charts that reveal insights."
-        elif code_type == "Machine Learning Model":
-            prompt = "Generate Python code to build a machine learning model for this dataset. Include preprocessing, model selection, training, and evaluation."
-        elif code_type == "Custom Request":
-            prompt = code_request
-        else:
-            prompt = "Generate Python code to analyze this dataset."
-            
-        # Add column focus
-        prompt += f"\n\n{column_focus}"
-        
-        # Create system prompt
-        system_prompt = f"""You are an advanced Python code generator for data analysis.
-
-The user is working with a dataset that has the following characteristics:
-{df_info}
-
-Your task is to generate clear, well-documented Python code that meets their requirements.
-The user is working in a Streamlit environment and has pandas, numpy, matplotlib, seaborn, and plotly available.
-The dataframe is available as 'self.df' in the code.
-
-Important guidelines for your code:
-1. Make the code complete and executable
-2. Include helpful comments to explain key steps
-3. Use best practices for data analysis
-4. Include appropriate error handling
-5. Generate visualizations that provide meaningful insights
-6. Use pandas efficiently for data manipulation
-
-Return ONLY the Python code without any additional explanation.
-"""
-
-        try:
-            # Prepare payload
-            payload = {
-                "model": getattr(st.session_state, 'claude_model', "claude-3-sonnet-20240229"),
-                "messages": [{"role": "user", "content": prompt}],
-                "system": system_prompt,
-                "temperature": getattr(st.session_state, 'claude_temperature', 0.7),
-                "max_tokens": 2500  # Higher token limit for code generation
-            }
-            
-            # Make API call
-            url = "https://api.anthropic.com/v1/messages"
-            headers = {
-                "x-api-key": st.session_state.claude_api_key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json"
-            }
-            
-            response = requests.post(url, headers=headers, json=payload)
-            
-            if response.status_code == 200:
-                code = response.json()["content"][0]["text"]
-                # Strip markdown code blocks if present
-                code = re.sub(r'```python\n', '', code)
-                code = re.sub(r'```\n?', '', code)
-                return code
-            else:
-                error_message = f"# Error from Claude API: {response.json().get('error', {}).get('message', 'Unknown error')}"
-                return error_message
-                
-        except Exception as e:
-            return f"# Sorry, an error occurred while generating code with Claude: {str(e)}"
-    
-    def _execute_code(self, code):
-        """Execute the generated Python code and display results"""
-        try:
-            # Create a local namespace with access to the dataframe
-            local_namespace = {
-                'self': self,
-                'df': self.df,
-                'pd': pd,
-                'np': np,
-                'plt': plt,
-                'px': px,
-                'go': go,
-                'st': st
-            }
-            
-            # Execute the code
-            exec(code, globals(), local_namespace)
-            
-            # Success message
-            st.success("Code executed successfully!")
-            
-        except Exception as e:
-            st.error(f"Error executing code: {str(e)}")
-            
-            # Display traceback for debugging
-            st.code(traceback.format_exc(), language="python")
+            # Initialize and render GenAI assistant
+            assistant = GenAIAssistant(iris_df)
+            assistant.render_interface()
