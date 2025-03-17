@@ -664,22 +664,8 @@ def render_welcome():
     
     with col1:
         st.markdown("""
-        ### 🚀 Optimized for Large Datasets
-        
-        This application now handles large datasets efficiently with:
-        
-        ✅ **Smart Data Loading**: Chunks and samples large files for better memory usage
-        
-        ✅ **Performance Optimizations**: Monitors memory usage and improves processing speed
-        
-        ✅ **Progressive Visualization**: Renders large datasets without performance impact
-        
-        ✅ **Memory Management**: Automatically optimizes data types to reduce memory usage
-        """)
-        
-        st.markdown("""
-        ### Explore, Process, and Visualize Your Data
-        
+                    ### Explore, Process, and Visualize Your Data
+                    
         This application provides a comprehensive set of tools for data analysis:
         
         🔍 **Data Overview**: Get a quick summary of your dataset
@@ -697,6 +683,20 @@ def render_welcome():
         🤖 **AI Assistant**: Get data insights through a rule-based AI assistant
         
         💡 **GenAI Assistant**: Leverage the power of AI for advanced data analysis
+        ### 🚀 Optimized for Large Datasets
+        
+        """)
+        
+        st.markdown("""        
+        This application now handles large datasets efficiently with:
+        
+        ✅ **Smart Data Loading**: Chunks and samples large files for better memory usage
+        
+        ✅ **Performance Optimizations**: Monitors memory usage and improves processing speed
+        
+        ✅ **Progressive Visualization**: Renders large datasets without performance impact
+        
+        ✅ **Memory Management**: Automatically optimizes data types to reduce memory usage
         """)
     
     with col2:
